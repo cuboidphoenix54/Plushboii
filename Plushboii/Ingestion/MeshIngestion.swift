@@ -74,11 +74,11 @@ struct MeshRenderData: Sendable {
     func makeNode() -> SCNNode {
         let float = MemoryLayout<Float>.size
         let positionSource = SCNGeometrySource(
-            data: positions, semantic: .vertex, vertexCount: vertexCount, usesFloatComponents: true,
+            data: positions, semantic: .vertex, vectorCount: vertexCount, usesFloatComponents: true,
             componentsPerVector: 3, bytesPerComponent: float, dataOffset: 0, dataStride: float * 3
         )
         let normalSource = SCNGeometrySource(
-            data: normals, semantic: .normal, vertexCount: vertexCount, usesFloatComponents: true,
+            data: normals, semantic: .normal, vectorCount: vertexCount, usesFloatComponents: true,
             componentsPerVector: 3, bytesPerComponent: float, dataOffset: 0, dataStride: float * 3
         )
         let element = SCNGeometryElement(

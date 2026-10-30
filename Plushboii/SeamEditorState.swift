@@ -35,17 +35,20 @@ final class SeamEditorState {
         guard let piece else { return }
 
         let pieceID = piece.id
-        let points = piece.controlPoints.map { RawControlPoint(index: $0.index, x: $0.x, y: $0.y, z: $0.z) }
+        let vertexData = piece.vertexData
+        let points = vertexData.isEmpty
+            ? piece.controlPoints.map { RawControlPoint(index: $0.index, x: $0.x, y: $0.y, z: $0.z) }
+            : []
         let faceData = piece.faceIndexData
         let seamData = piece.seamPathData
-        guard !points.isEmpty, !faceData.isEmpty else {
+        guard !(points.isEmpty && vertexData.isEmpty), !faceData.isEmpty else {
             loadedPieceID = pieceID
             return
         }
 
         isLoading = true
         let loaded = await Task.detached(priority: .userInitiated) {
-            MeshTopology.load(points: points, faceData: faceData, seamData: seamData)
+            MeshTopology.load(points: points, vertexData: vertexData, faceData: faceData, seamData: seamData)
         }.value
         guard !Task.isCancelled else { return }
         isLoading = false

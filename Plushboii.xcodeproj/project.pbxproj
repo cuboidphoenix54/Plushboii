@@ -29,6 +29,11 @@
 		A10000000000000000000041 /* MeshIngestion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* MeshIngestion.swift */; };
 		A10000000000000000000042 /* LocalMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* LocalMeshProvider.swift */; };
 		A10000000000000000000043 /* APIMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* APIMeshProvider.swift */; };
+		A10000000000000000000045 /* CoreMLMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* CoreMLMeshProvider.swift */; };
+		A10000000000000000000046 /* LocalLRMTensorParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000046 /* LocalLRMTensorParser.swift */; };
+		A10000000000000000000047 /* MarchingTetrahedra.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000047 /* MarchingTetrahedra.swift */; };
+		A10000000000000000000048 /* TripoSR_DensityPipeline.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000048 /* TripoSR_DensityPipeline.mlpackage */; };
+		A10000000000000000000044 /* STLReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* STLReader.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +62,11 @@
 		A20000000000000000000041 /* MeshIngestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshIngestion.swift; sourceTree = "<group>"; };
 		A20000000000000000000042 /* LocalMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMeshProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000043 /* APIMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIMeshProvider.swift; sourceTree = "<group>"; };
+		A20000000000000000000045 /* CoreMLMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreMLMeshProvider.swift; sourceTree = "<group>"; };
+		A20000000000000000000046 /* LocalLRMTensorParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLRMTensorParser.swift; sourceTree = "<group>"; };
+		A20000000000000000000047 /* MarchingTetrahedra.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarchingTetrahedra.swift; sourceTree = "<group>"; };
+		A20000000000000000000048 /* TripoSR_DensityPipeline.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = TripoSR_DensityPipeline.mlpackage; sourceTree = "<group>"; };
+		A20000000000000000000044 /* STLReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = STLReader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +83,7 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000002 /* Plushboii */,
+				A20000000000000000000048 /* TripoSR_DensityPipeline.mlpackage */,
 				A20000000000000000000007 /* Plushboii.entitlements */,
 				A40000000000000000000003 /* Products */,
 			);
@@ -134,6 +145,10 @@
 				A20000000000000000000041 /* MeshIngestion.swift */,
 				A20000000000000000000042 /* LocalMeshProvider.swift */,
 				A20000000000000000000043 /* APIMeshProvider.swift */,
+				A20000000000000000000044 /* STLReader.swift */,
+				A20000000000000000000047 /* MarchingTetrahedra.swift */,
+				A20000000000000000000046 /* LocalLRMTensorParser.swift */,
+				A20000000000000000000045 /* CoreMLMeshProvider.swift */,
 			);
 			path = Ingestion;
 			sourceTree = "<group>";
@@ -162,7 +177,7 @@
 		A60000000000000000000001 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				BuildIndependentTargetsIn parallel = 1;
+				"BuildIndependentTargetsIn parallel" = 1;
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					A50000000000000000000001 = {CreatedOnToolsVersion = 16.0; };
@@ -197,6 +212,11 @@
 				A10000000000000000000041 /* MeshIngestion.swift in Sources */,
 				A10000000000000000000042 /* LocalMeshProvider.swift in Sources */,
 				A10000000000000000000043 /* APIMeshProvider.swift in Sources */,
+				A10000000000000000000044 /* STLReader.swift in Sources */,
+				A10000000000000000000048 /* TripoSR_DensityPipeline.mlpackage in Sources */,
+				A10000000000000000000047 /* MarchingTetrahedra.swift in Sources */,
+				A10000000000000000000046 /* LocalLRMTensorParser.swift in Sources */,
+				A10000000000000000000045 /* CoreMLMeshProvider.swift in Sources */,
 				A10000000000000000000030 /* PatternGeometry.swift in Sources */,
 				A10000000000000000000031 /* PatternLayout.swift in Sources */,
 				A10000000000000000000032 /* PatternRenderer.swift in Sources */,

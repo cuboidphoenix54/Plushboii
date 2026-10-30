@@ -34,6 +34,9 @@ final class PatternPiece {
     var sourceMeshFormat: String?
     var faceIndexData: Data
     var seamPathData: Data = Data()
+    /// Packed little-endian Float64 x,y,z triples. Preferred over `controlPoints`, which stays only for
+    /// pieces stored before this field existed (one SwiftData object per vertex is too slow for dense scans).
+    var vertexData: Data = Data()
     var pattern: Pattern?
 
     @Relationship(deleteRule: .cascade, inverse: \ControlPoint.piece)
@@ -46,6 +49,7 @@ final class PatternPiece {
         sourceMeshFormat: String? = nil,
         faceIndexData: Data = Data(),
         seamPathData: Data = Data(),
+        vertexData: Data = Data(),
         pattern: Pattern? = nil,
         controlPoints: [ControlPoint] = []
     ) {
@@ -55,6 +59,7 @@ final class PatternPiece {
         self.sourceMeshFormat = sourceMeshFormat
         self.faceIndexData = faceIndexData
         self.seamPathData = seamPathData
+        self.vertexData = vertexData
         self.pattern = pattern
         self.controlPoints = controlPoints
     }

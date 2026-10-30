@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 private enum ImportKind {
     case image
+    case localImage
     case model
 }
 
@@ -43,6 +44,7 @@ struct ContentView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var importStatus: String?
+    @State private var importProgressLabel = "Importing and validating mesh..."
     @State private var seamEditor = SeamEditorState()
     @State private var isSeamToolActive = false
     @State private var cameraResetToken = 0
@@ -58,7 +60,7 @@ struct ContentView: View {
 
     private var meshToken: String {
         guard let piece = selectedPiece else { return "none-\(meshReloadToken)" }
-        return "\(piece.id)-\(piece.controlPoints.count)-\(piece.faceIndexData.count)-\(meshReloadToken)"
+        return "\(piece.id)-\(piece.vertexData.count)-\(piece.faceIndexData.count)-\(meshReloadToken)"
     }
 
     var body: some View {
@@ -79,7 +81,7 @@ struct ContentView: View {
         }
         .fileImporter(
             isPresented: $isChoosingFile,
-            allowedContentTypes: fileImportKind == .image ? [.image] : Self.modelTypes,
+            allowedContentTypes: fileImportKind == .model ? Self.modelTypes : [.image],
             allowsMultipleSelection: false,
             onCompletion: handleFileSelection
         )
@@ -117,6 +119,24 @@ struct ContentView: View {
         .disabled(isImporting)
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
+                Button {
+                    beginImport(.localImage)
+                } label: {
+                    Label("Generate from Image (Local Neural Engine)", systemImage: "cpu")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isImporting || selectedPattern == nil)
+                .help("Generate a mesh from a photo on this Mac using Core ML")
+
+                if isImporting {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(importProgressLabel).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+
                 Menu {
                     Button("Generate from Images (AI)", systemImage: "wand.and.stars") {
                         beginImport(.image)
@@ -218,7 +238,7 @@ struct ContentView: View {
                     if isImporting {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Importing and validating mesh...")
+                        Text(importProgressLabel)
                             .foregroundStyle(.secondary)
                     } else if let importStatus {
                         Text(importStatus)
@@ -325,7 +345,11 @@ struct ContentView: View {
         }
     }
 
-    private static let modelTypes: [UTType] = [UTType(filenameExtension: "obj"), UTType.usdz].compactMap { $0 }
+    private static let modelTypes: [UTType] = [
+        UTType(filenameExtension: "obj"),
+        UTType(filenameExtension: "stl", conformingTo: .data),
+        .usdz,
+    ].compactMap { $0 }
 
     private func beginImport(_ kind: ImportKind) {
         guard selectedPattern != nil else { return }
@@ -334,6 +358,9 @@ struct ContentView: View {
             return
         }
         fileImportKind = kind
+        importProgressLabel = kind == .localImage
+            ? "Running on the Neural Engine..."
+            : "Importing and validating mesh..."
         isChoosingFile = true
     }
 
@@ -344,6 +371,8 @@ struct ContentView: View {
             switch fileImportKind {
             case .image:
                 ingest(with: APIMeshProvider(apiKey: apiKey, imageURL: url), into: pattern)
+            case .localImage:
+                ingest(with: CoreMLMeshProvider(imageURL: url), into: pattern)
             case .model:
                 ingest(with: LocalMeshProvider(fileURL: url), into: pattern)
             }
@@ -411,22 +440,22 @@ struct ContentView: View {
 
     private func persist(_ mesh: ImportedMesh, into piece: PatternPiece, format: String, name: String) throws {
         let faceData = try mesh.faceIndexData()
-        let points = mesh.vertices.enumerated().map { index, vertex in
-            ControlPoint(index: index, x: vertex.x, y: vertex.y, z: vertex.z)
+        var coordinates = [Double]()
+        coordinates.reserveCapacity(mesh.vertices.count * 3)
+        for vertex in mesh.vertices {
+            coordinates.append(contentsOf: [vertex.x, vertex.y, vertex.z])
         }
 
         for oldPoint in piece.controlPoints {
             modelContext.delete(oldPoint)
         }
-        piece.controlPoints = points
+        piece.controlPoints = []
+        piece.vertexData = coordinates.withUnsafeBytes { Data($0) }
         piece.faceIndexData = faceData
         piece.seamPathData = Data()
         piece.sourceMeshFormat = format
         piece.name = name
         piece.pattern?.modifiedAt = .now
-        for point in points {
-            modelContext.insert(point)
-        }
         try modelContext.save()
     }
 

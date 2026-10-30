@@ -130,9 +130,21 @@ struct MeshTopology: Sendable, Equatable {
     }
 
     /// Validates stored geometry and seams; anything inconsistent is rejected rather than repaired.
-    static func load(points: [RawControlPoint], faceData: Data, seamData: Data) -> LoadedMesh? {
-        let sorted = points.sorted { $0.index < $1.index }
-        guard sorted.indices.allSatisfy({ sorted[$0].index == $0 }) else { return nil }
+    static func load(points: [RawControlPoint], vertexData: Data = Data(), faceData: Data, seamData: Data) -> LoadedMesh? {
+        let positions: [SIMD3<Double>]
+        if vertexData.isEmpty {
+            let sorted = points.sorted { $0.index < $1.index }
+            guard sorted.indices.allSatisfy({ sorted[$0].index == $0 }) else { return nil }
+            positions = sorted.map { SIMD3<Double>($0.x, $0.y, $0.z) }
+        } else {
+            let stride = 3 * MemoryLayout<Double>.size
+            guard vertexData.count % stride == 0 else { return nil }
+            var coordinates = [Double](repeating: 0, count: vertexData.count / MemoryLayout<Double>.size)
+            coordinates.withUnsafeMutableBytes { _ = vertexData.copyBytes(to: $0) }
+            positions = (0..<(coordinates.count / 3)).map {
+                SIMD3<Double>(coordinates[$0 * 3], coordinates[$0 * 3 + 1], coordinates[$0 * 3 + 2])
+            }
+        }
         guard
             let faces = try? JSONDecoder().decode([[Int]].self, from: faceData),
             faces.allSatisfy({ $0.count == 3 }),
@@ -140,7 +152,6 @@ struct MeshTopology: Sendable, Equatable {
         else {
             return nil
         }
-        let positions = sorted.map { SIMD3<Double>($0.x, $0.y, $0.z) }
         guard let topology = MeshTopology(positions: positions, triangles: faces.flatMap { $0.map(Int32.init) }) else {
             return nil
         }

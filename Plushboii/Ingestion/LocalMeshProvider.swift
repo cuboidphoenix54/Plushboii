@@ -22,10 +22,10 @@ final class LocalMeshProvider: MeshIngestionService {
     }
 }
 
-/// Reads `.obj` and `.usdz` through `MDLAsset`. Everything here is blocking and must run off the main actor.
+/// Reads `.stl` directly and `.obj`/`.usdz` through `MDLAsset`. Everything here is blocking and must run off the main actor.
 enum ModelIOMeshReader {
     static let maximumFileBytes = 512 * 1024 * 1024
-    static let supportedExtensions: Set<String> = ["obj", "usdz"]
+    static let supportedExtensions: Set<String> = ["stl", "obj", "usdz"]
 
     private struct PositionKey: Hashable {
         let x: UInt32
@@ -35,7 +35,10 @@ enum ModelIOMeshReader {
 
     static func read(_ url: URL) throws -> ImportedMesh {
         let ext = url.pathExtension.lowercased()
-        guard supportedExtensions.contains(ext), MDLAsset.canImportFileExtension(ext) else {
+        guard supportedExtensions.contains(ext) else {
+            throw MeshIngestionError.unsupportedFormat(ext)
+        }
+        guard ext == "stl" || MDLAsset.canImportFileExtension(ext) else {
             throw MeshIngestionError.unsupportedFormat(ext)
         }
 
@@ -60,6 +63,16 @@ enum ModelIOMeshReader {
             defer { try? handle.close() }
             guard (try? handle.read(upToCount: 4)) == Data([0x50, 0x4B, 0x03, 0x04]) else {
                 throw MeshIngestionError.unreadableFile("the file is not a valid USDZ archive")
+            }
+        }
+
+        if ext == "stl" {
+            do {
+                return try STLMeshReader.read(Data(contentsOf: url))
+            } catch let error as MeshIngestionError {
+                throw error
+            } catch {
+                throw MeshIngestionError.unreadableFile(error.localizedDescription)
             }
         }
 

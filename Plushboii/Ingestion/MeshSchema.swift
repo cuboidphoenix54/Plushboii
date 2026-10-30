@@ -31,7 +31,7 @@ enum MeshIngestionError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unsupportedFormat(let ext):
-            "\".\(ext)\" files are not supported. Choose an .obj or .usdz file."
+            "\".\(ext)\" files are not supported. Choose an .stl, .obj, or .usdz file."
         case .unreadableFile(let reason):
             "The 3D file could not be read: \(reason)"
         case .securityScopeDenied:
