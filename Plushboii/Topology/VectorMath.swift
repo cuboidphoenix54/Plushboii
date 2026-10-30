@@ -13,6 +13,7 @@ typealias Vec3 = SIMD3<Double>
 }
 
 @inline(__always) func vlength(_ a: Vec3) -> Double { vdot(a, a).squareRoot() }
+@inline(__always) func vdot(_ a: Vec2, _ b: Vec2) -> Double { (a * b).sum() }
 @inline(__always) func vlength(_ a: Vec2) -> Double { (a * a).sum().squareRoot() }
 
 /// Dense double-precision kernels. They use vDSP on Apple platforms and plain loops elsewhere,

@@ -1,22 +1,5 @@
 import Foundation
 
-struct MeshVertex: Sendable {
-    let x: Double
-    let y: Double
-    let z: Double
-}
-
-struct MeshTriangle: Sendable {
-    let a: Int
-    let b: Int
-    let c: Int
-}
-
-struct ImportedMesh: Sendable {
-    let vertices: [MeshVertex]
-    let triangles: [MeshTriangle]
-}
-
 struct MeshGenerationResult: Sendable {
     let mesh: ImportedMesh
     let objFileURL: URL
@@ -31,6 +14,8 @@ enum MeshyError: LocalizedError {
     case httpStatus(Int)
     case taskFailed(String)
     case pollingTimedOut
+    case networkTimedOut
+    case networkFailure(String)
     case missingArtifact(String)
     case invalidArtifactURL
     case artifactTooLarge
@@ -53,6 +38,10 @@ enum MeshyError: LocalizedError {
             "Meshy could not generate the model: \(message)"
         case .pollingTimedOut:
             "Meshy did not finish the generation task before the timeout."
+        case .networkTimedOut:
+            "The connection to Meshy timed out. No geometry was produced."
+        case .networkFailure(let reason):
+            "The connection to Meshy failed: \(reason)"
         case .missingArtifact(let format):
             "Meshy's completed task did not include a \(format.uppercased()) file."
         case .invalidArtifactURL:
@@ -161,7 +150,13 @@ actor MeshyClient {
     private func download(_ url: URL, format: String) async throws -> URL {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        let (temporaryURL, response) = try await session.download(for: request)
+        let temporaryURL: URL
+        let response: URLResponse
+        do {
+            (temporaryURL, response) = try await session.download(for: request)
+        } catch {
+            throw Self.mapTransportError(error)
+        }
         try validate(response)
 
         let attributes = try FileManager.default.attributesOfItem(atPath: temporaryURL.path)
@@ -186,12 +181,28 @@ actor MeshyClient {
         _ request: URLRequest,
         as type: Response.Type
     ) async throws -> Response {
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw Self.mapTransportError(error)
+        }
         try validate(response)
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch {
             throw MeshyError.invalidResponse
+        }
+    }
+
+    /// Kill Switch: transport failures become typed errors; cancellation stays cancellation.
+    private static func mapTransportError(_ error: Error) -> Error {
+        guard let urlError = error as? URLError else { return error }
+        switch urlError.code {
+        case .cancelled: return CancellationError()
+        case .timedOut: return MeshyError.networkTimedOut
+        default: return MeshyError.networkFailure(urlError.localizedDescription)
         }
     }
 
@@ -210,7 +221,7 @@ actor MeshyClient {
         }
     }
 
-    private static func parseOBJ(_ data: Data) throws -> ImportedMesh {
+    static func parseOBJ(_ data: Data) throws -> ImportedMesh {
         guard let text = String(data: data, encoding: .utf8) else {
             throw MeshyError.malformedOBJ("the file is not UTF-8 text")
         }

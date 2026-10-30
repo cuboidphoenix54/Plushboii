@@ -20,6 +20,15 @@
 		A10000000000000000000014 /* DistortionVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* DistortionVerifier.swift */; };
 		A10000000000000000000015 /* DartPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* DartPlanner.swift */; };
 		A10000000000000000000016 /* TopologyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* TopologyEngine.swift */; };
+		A10000000000000000000030 /* PatternGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* PatternGeometry.swift */; };
+		A10000000000000000000031 /* PatternLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* PatternLayout.swift */; };
+		A10000000000000000000032 /* PatternRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* PatternRenderer.swift */; };
+		A10000000000000000000033 /* PatternPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* PatternPDFExporter.swift */; };
+		A10000000000000000000034 /* PatternPrintOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* PatternPrintOperation.swift */; };
+		A10000000000000000000040 /* MeshSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* MeshSchema.swift */; };
+		A10000000000000000000041 /* MeshIngestion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* MeshIngestion.swift */; };
+		A10000000000000000000042 /* LocalMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* LocalMeshProvider.swift */; };
+		A10000000000000000000043 /* APIMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* APIMeshProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +48,15 @@
 		A20000000000000000000014 /* DistortionVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistortionVerifier.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 /* DartPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DartPlanner.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* TopologyEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopologyEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* PatternGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternGeometry.swift; sourceTree = "<group>"; };
+		A20000000000000000000031 /* PatternLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternLayout.swift; sourceTree = "<group>"; };
+		A20000000000000000000032 /* PatternRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternRenderer.swift; sourceTree = "<group>"; };
+		A20000000000000000000033 /* PatternPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternPDFExporter.swift; sourceTree = "<group>"; };
+		A20000000000000000000034 /* PatternPrintOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternPrintOperation.swift; sourceTree = "<group>"; };
+		A20000000000000000000040 /* MeshSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshSchema.swift; sourceTree = "<group>"; };
+		A20000000000000000000041 /* MeshIngestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshIngestion.swift; sourceTree = "<group>"; };
+		A20000000000000000000042 /* LocalMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMeshProvider.swift; sourceTree = "<group>"; };
+		A20000000000000000000043 /* APIMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIMeshProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,6 +89,8 @@
 				A20000000000000000000008 /* MeshTopology.swift */,
 				A20000000000000000000009 /* SeamEditorState.swift */,
 				A40000000000000000000010 /* Topology */,
+				A40000000000000000000011 /* Print */,
+				A40000000000000000000012 /* Ingestion */,
 			);
 			path = Plushboii;
 			sourceTree = "<group>";
@@ -93,6 +113,29 @@
 				A20000000000000000000016 /* TopologyEngine.swift */,
 			);
 			path = Topology;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000011 /* Print */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000030 /* PatternGeometry.swift */,
+				A20000000000000000000031 /* PatternLayout.swift */,
+				A20000000000000000000032 /* PatternRenderer.swift */,
+				A20000000000000000000033 /* PatternPDFExporter.swift */,
+				A20000000000000000000034 /* PatternPrintOperation.swift */,
+			);
+			path = Print;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000012 /* Ingestion */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000040 /* MeshSchema.swift */,
+				A20000000000000000000041 /* MeshIngestion.swift */,
+				A20000000000000000000042 /* LocalMeshProvider.swift */,
+				A20000000000000000000043 /* APIMeshProvider.swift */,
+			);
+			path = Ingestion;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -150,6 +193,15 @@
 				A10000000000000000000005 /* MeshSceneView.swift in Sources */,
 				A10000000000000000000006 /* MeshTopology.swift in Sources */,
 				A10000000000000000000007 /* SeamEditorState.swift in Sources */,
+				A10000000000000000000040 /* MeshSchema.swift in Sources */,
+				A10000000000000000000041 /* MeshIngestion.swift in Sources */,
+				A10000000000000000000042 /* LocalMeshProvider.swift in Sources */,
+				A10000000000000000000043 /* APIMeshProvider.swift in Sources */,
+				A10000000000000000000030 /* PatternGeometry.swift in Sources */,
+				A10000000000000000000031 /* PatternLayout.swift in Sources */,
+				A10000000000000000000032 /* PatternRenderer.swift in Sources */,
+				A10000000000000000000033 /* PatternPDFExporter.swift in Sources */,
+				A10000000000000000000034 /* PatternPrintOperation.swift in Sources */,
 				A10000000000000000000010 /* VectorMath.swift in Sources */,
 				A10000000000000000000011 /* FlatteningTypes.swift in Sources */,
 				A10000000000000000000012 /* SurfaceCutter.swift in Sources */,

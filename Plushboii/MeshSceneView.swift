@@ -5,6 +5,8 @@ import simd
 
 struct MeshSceneView: NSViewRepresentable {
     let mesh: MeshTopology?
+    /// Node produced by a `MeshIngestionService`; used instead of rebuilding geometry when it matches `mesh`.
+    let ingestedNode: SCNNode?
     let seams: [SeamPath]
     let isPickingEnabled: Bool
     let resetToken: Int
@@ -21,7 +23,7 @@ struct MeshSceneView: NSViewRepresentable {
         view.onPick = onPick
         view.onUndo = onUndo
         view.isPickingEnabled = isPickingEnabled
-        view.apply(mesh: mesh, seams: seams)
+        view.apply(mesh: mesh, seams: seams, ingestedNode: ingestedNode)
         view.applyResetToken(resetToken)
     }
 }
@@ -41,6 +43,7 @@ final class TrackpadSCNView: SCNView {
     private let overlayNode = SCNNode()
     private let cameraNode = SCNNode()
     private var meshNode: SCNNode?
+    private var ingestedNode: SCNNode?
     private var mesh: MeshTopology?
     private var appliedSeams: [SeamPath] = []
     private var distance = 3.0
@@ -84,7 +87,8 @@ final class TrackpadSCNView: SCNView {
         updateCamera()
     }
 
-    func apply(mesh newMesh: MeshTopology?, seams: [SeamPath]) {
+    func apply(mesh newMesh: MeshTopology?, seams: [SeamPath], ingestedNode node: SCNNode?) {
+        ingestedNode = node
         var overlayDirty = seams != appliedSeams
         if newMesh?.id != mesh?.id {
             mesh = newMesh
@@ -110,6 +114,15 @@ final class TrackpadSCNView: SCNView {
         meshNode?.removeFromParentNode()
         meshNode = nil
         guard let mesh else { return }
+
+        // The ingested node shares vertex numbering with the stored mesh, so picks still index correctly.
+        if let node = ingestedNode,
+           node.geometry?.sources(for: .vertex).first?.vectorCount == mesh.positions.count {
+            node.removeFromParentNode()
+            orbitNode.addChildNode(node)
+            meshNode = node
+            return
+        }
 
         let vertices = mesh.positions.map { SCNVector3(x: CGFloat($0.x), y: CGFloat($0.y), z: CGFloat($0.z)) }
         let normals = mesh.normals.map { SCNVector3(x: CGFloat($0.x), y: CGFloat($0.y), z: CGFloat($0.z)) }

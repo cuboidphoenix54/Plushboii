@@ -1,6 +1,28 @@
+import SceneKit
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+
+private enum ImportKind {
+    case image
+    case model
+}
+
+private enum FabricChoice: String, CaseIterable, Identifiable {
+    case none = "No fabric adjustment"
+    case minky = "2-way stretch minky"
+    case canvas = "Rigid canvas (darts)"
+
+    var id: Self { self }
+
+    var profile: FabricProfile {
+        switch self {
+        case .none: .none
+        case .minky: .twoWayStretch(warpPercent: 50, weftPercent: 40)
+        case .canvas: .rigid(maxDarts: 4)
+        }
+    }
+}
 
 @MainActor
 struct ContentView: View {
@@ -11,7 +33,13 @@ struct ContentView: View {
     @State private var selectedPieceID: UUID?
     @State private var apiKey = ""
     @State private var isImporting = false
-    @State private var isChoosingImage = false
+    @State private var isChoosingFile = false
+    @State private var fileImportKind = ImportKind.model
+    @State private var ingestedNode: (pieceID: UUID, node: SCNNode)?
+    @State private var ingestedMesh: (pieceID: UUID, mesh: ImportedMesh)?
+    @State private var fabricChoice = FabricChoice.none
+    @State private var isFlattening = false
+    @State private var flattening: FlatteningResult?
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var importStatus: String?
@@ -50,12 +78,12 @@ struct ContentView: View {
             }
         }
         .fileImporter(
-            isPresented: $isChoosingImage,
-            allowedContentTypes: [.image],
+            isPresented: $isChoosingFile,
+            allowedContentTypes: fileImportKind == .image ? [.image] : Self.modelTypes,
             allowsMultipleSelection: false,
-            onCompletion: handleImageSelection
+            onCompletion: handleFileSelection
         )
-        .alert("Mesh Import Failed", isPresented: $showError) {
+        .alert("Operation Failed", isPresented: $showError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage)
@@ -88,19 +116,37 @@ struct ContentView: View {
         .listStyle(.sidebar)
         .disabled(isImporting)
         .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button(action: createPattern) {
-                    Label("New Pattern", systemImage: "plus")
-                }
-                Spacer()
-                if let selectedPattern {
-                    Button(role: .destructive) {
-                        delete(selectedPattern)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+            VStack(spacing: 8) {
+                Menu {
+                    Button("Generate from Images (AI)", systemImage: "wand.and.stars") {
+                        beginImport(.image)
                     }
-                    .help("Delete selected pattern")
-                    .disabled(isImporting)
+                    Button("Select Local 3D File", systemImage: "folder") {
+                        beginImport(.model)
+                    }
+                } label: {
+                    Label("Import Model", systemImage: "square.and.arrow.down")
+                        .frame(maxWidth: .infinity)
+                }
+                .menuStyle(.borderedButton)
+                .controlSize(.large)
+                .disabled(isImporting || selectedPattern == nil)
+                .help(selectedPattern == nil ? "Select a pattern first" : "Import a 3D model into this pattern")
+
+                HStack {
+                    Button(action: createPattern) {
+                        Label("New Pattern", systemImage: "plus")
+                    }
+                    Spacer()
+                    if let selectedPattern {
+                        Button(role: .destructive) {
+                            delete(selectedPattern)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .help("Delete selected pattern")
+                        .disabled(isImporting)
+                    }
                 }
             }
             .padding(12)
@@ -130,12 +176,6 @@ struct ContentView: View {
                         Label("Add Piece", systemImage: "plus")
                     }
                     .disabled(isImporting)
-                    Button {
-                        isChoosingImage = true
-                    } label: {
-                        Label(isImporting ? "Generating…" : "Generate 3D", systemImage: "cube.transparent")
-                    }
-                    .disabled(isImporting || apiKey.isEmpty || selectedPiece == nil)
                 }
                 .padding()
 
@@ -143,6 +183,7 @@ struct ContentView: View {
                     seamToolbar
                     MeshSceneView(
                         mesh: seamEditor.mesh,
+                        ingestedNode: ingestedNode?.pieceID == selectedPiece.id ? ingestedNode?.node : nil,
                         seams: seamEditor.seams,
                         isPickingEnabled: isSeamToolActive && seamEditor.mesh != nil,
                         resetToken: cameraResetToken,
@@ -157,7 +198,7 @@ struct ContentView: View {
                                 "No Mesh Yet",
                                 systemImage: "cube.transparent",
                                 description: Text(
-                                    seamEditor.message ?? "Generate a mesh from an image to preview it here."
+                                    seamEditor.message ?? "Use Import Model in the sidebar to bring in a mesh."
                                 )
                             )
                         }
@@ -166,7 +207,7 @@ struct ContentView: View {
                     ContentUnavailableView(
                         "No Pattern Pieces",
                         systemImage: "square.dashed",
-                        description: Text("Add a piece, then generate a 3D mesh from an image.")
+                        description: Text("Add a piece, or use Import Model in the sidebar.")
                     )
                 }
 
@@ -177,7 +218,7 @@ struct ContentView: View {
                     if isImporting {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Generating and validating mesh...")
+                        Text("Importing and validating mesh...")
                             .foregroundStyle(.secondary)
                     } else if let importStatus {
                         Text(importStatus)
@@ -215,6 +256,14 @@ struct ContentView: View {
                 .disabled(seamEditor.seams.isEmpty)
             Button("Reset View") { cameraResetToken += 1 }
                 .disabled(seamEditor.mesh == nil)
+            Divider().frame(height: 16)
+            Picker("Fabric", selection: $fabricChoice) {
+                ForEach(FabricChoice.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 190)
+            Button(isFlattening ? "Flattening…" : "Flatten") { flattenSelectedPiece() }
+                .disabled(seamEditor.mesh == nil || isFlattening || seamEditor.isBusy)
             Spacer()
             Text(seamEditor.message ?? "\(seamEditor.seams.count) seam(s). Click to add, Shift-click for a new seam.")
                 .font(.caption)
@@ -248,7 +297,8 @@ struct ContentView: View {
         }
     }
 
-    private func addPiece(to pattern: Pattern) {
+    @discardableResult
+    private func addPiece(to pattern: Pattern) -> PatternPiece {
         let nextOrder = (pattern.pieces.map(\.sortOrder).max() ?? -1) + 1
         let piece = PatternPiece(name: "Piece \(nextOrder + 1)", sortOrder: nextOrder, pattern: pattern)
         pattern.modifiedAt = .now
@@ -259,6 +309,7 @@ struct ContentView: View {
         } catch {
             present(error)
         }
+        return piece
     }
 
     private func delete(_ pattern: Pattern) {
@@ -274,37 +325,52 @@ struct ContentView: View {
         }
     }
 
-    private func handleImageSelection(_ result: Result<[URL], Error>) {
+    private static let modelTypes: [UTType] = [UTType(filenameExtension: "obj"), UTType.usdz].compactMap { $0 }
+
+    private func beginImport(_ kind: ImportKind) {
+        guard selectedPattern != nil else { return }
+        if kind == .image, apiKey.isEmpty {
+            present(MeshyError.missingAPIKey)
+            return
+        }
+        fileImportKind = kind
+        isChoosingFile = true
+    }
+
+    private func handleFileSelection(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            guard let url = urls.first, let selectedPiece else { return }
-            importImage(at: url, into: selectedPiece)
+            guard let url = urls.first, let pattern = selectedPattern else { return }
+            switch fileImportKind {
+            case .image:
+                ingest(with: APIMeshProvider(apiKey: apiKey, imageURL: url), into: pattern)
+            case .model:
+                ingest(with: LocalMeshProvider(fileURL: url), into: pattern)
+            }
         case .failure(let error):
             present(error)
         }
     }
 
-    private func importImage(at url: URL, into piece: PatternPiece) {
-        guard !apiKey.isEmpty else {
-            present(MeshyError.missingAPIKey)
-            return
-        }
+    /// Awaits a provider, injects the node into the canvas by recording it for the piece, and stores the
+    /// validated arrays. Nothing is stored or shown unless the provider returned successfully.
+    private func ingest(with provider: some MeshIngestionService, into pattern: Pattern) {
+        let target = selectedPiece
         importStatus = nil
         isImporting = true
         Task {
             do {
-                let imageData = try await Task.detached(priority: .userInitiated) {
-                    let hasAccess = url.startAccessingSecurityScopedResource()
-                    defer {
-                        if hasAccess { url.stopAccessingSecurityScopedResource() }
-                    }
-                    return try Data(contentsOf: url)
-                }.value
-                let mimeType = Self.mimeType(for: url)
-                let result = try await MeshyClient(apiKey: apiKey).generate(from: imageData, mimeType: mimeType)
-                try persist(result.mesh, into: piece)
+                let (node, mesh) = try await provider.ingest()
+                let piece = target ?? addPiece(to: pattern)
+                try persist(mesh, into: piece, format: provider.sourceFormat, name: provider.suggestedName)
+                selectedPieceID = piece.id
+                ingestedNode = (piece.id, node)
+                ingestedMesh = (piece.id, mesh)
+                flattening = nil
                 meshReloadToken += 1
-                importStatus = "OBJ and USDZ saved to \(result.objFileURL.deletingLastPathComponent().path)"
+                importStatus = "\(mesh.vertices.count) vertices, \(mesh.triangles.count) faces validated and ready for flattening."
+                isImporting = false
+            } catch is CancellationError {
                 isImporting = false
             } catch {
                 isImporting = false
@@ -313,8 +379,38 @@ struct ContentView: View {
         }
     }
 
-    private func persist(_ mesh: ImportedMesh, into piece: PatternPiece) throws {
-        let faceData = try JSONEncoder().encode(mesh.triangles.map { [$0.a, $0.b, $0.c] })
+    /// Runs the topology engine off the main actor on the ingested vertex/face arrays (or, for a piece
+    /// loaded from storage, the identical arrays rebuilt from SwiftData) bounded by the current seams.
+    private func flattenSelectedPiece() {
+        guard let topology = seamEditor.mesh, let piece = selectedPiece else { return }
+        let input: (positions: [Vec3], triangles: [Int32])
+        if let ingestedMesh, ingestedMesh.pieceID == piece.id {
+            input = ingestedMesh.mesh.topologyInput
+        } else {
+            input = (topology.positions, topology.triangles)
+        }
+        let seams = seamEditor.seams.map(\.vertices)
+        let fabric = fabricChoice.profile
+        isFlattening = true
+        importStatus = nil
+        Task {
+            do {
+                let result = try await offMainActor {
+                    try TopologyEngine.flatten(positions: input.positions, triangles: input.triangles, seams: seams, fabric: fabric)
+                }
+                flattening = result
+                let worst = result.islands.map(\.report.areaDelta).max() ?? 0
+                let darts = result.islands.reduce(0) { $0 + $1.darts.count }
+                importStatus = "Flattened \(result.islands.count) island(s); worst area delta \((worst * 100).formatted(.number.precision(.fractionLength(2))))%, \(darts) dart(s)."
+            } catch {
+                present(error)
+            }
+            isFlattening = false
+        }
+    }
+
+    private func persist(_ mesh: ImportedMesh, into piece: PatternPiece, format: String, name: String) throws {
+        let faceData = try mesh.faceIndexData()
         let points = mesh.vertices.enumerated().map { index, vertex in
             ControlPoint(index: index, x: vertex.x, y: vertex.y, z: vertex.z)
         }
@@ -325,8 +421,8 @@ struct ContentView: View {
         piece.controlPoints = points
         piece.faceIndexData = faceData
         piece.seamPathData = Data()
-        piece.sourceMeshFormat = "obj"
-        piece.name = "Generated Mesh"
+        piece.sourceMeshFormat = format
+        piece.name = name
         piece.pattern?.modifiedAt = .now
         for point in points {
             modelContext.insert(point)
@@ -337,16 +433,5 @@ struct ContentView: View {
     private func present(_ error: Error) {
         errorMessage = error.localizedDescription
         showError = true
-    }
-
-    private static func mimeType(for url: URL) -> String {
-        guard
-            let type = UTType(filenameExtension: url.pathExtension),
-            let mimeType = type.preferredMIMEType,
-            ["image/jpeg", "image/png", "image/webp"].contains(mimeType)
-        else {
-            return "application/octet-stream"
-        }
-        return mimeType
     }
 }
