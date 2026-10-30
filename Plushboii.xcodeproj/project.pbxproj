@@ -1,0 +1,255 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* PlushboiiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* PlushboiiApp.swift */; };
+		A10000000000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* Models.swift */; };
+		A10000000000000000000003 /* MeshyClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* MeshyClient.swift */; };
+		A10000000000000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* ContentView.swift */; };
+		A10000000000000000000005 /* MeshSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* MeshSceneView.swift */; };
+		A10000000000000000000006 /* MeshTopology.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* MeshTopology.swift */; };
+		A10000000000000000000007 /* SeamEditorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SeamEditorState.swift */; };
+		A10000000000000000000010 /* VectorMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* VectorMath.swift */; };
+		A10000000000000000000011 /* FlatteningTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* FlatteningTypes.swift */; };
+		A10000000000000000000012 /* SurfaceCutter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* SurfaceCutter.swift */; };
+		A10000000000000000000013 /* LSCMSolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* LSCMSolver.swift */; };
+		A10000000000000000000014 /* DistortionVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* DistortionVerifier.swift */; };
+		A10000000000000000000015 /* DartPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* DartPlanner.swift */; };
+		A10000000000000000000016 /* TopologyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* TopologyEngine.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* PlushboiiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlushboiiApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* MeshyClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshyClient.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* MeshSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshSceneView.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* MeshTopology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshTopology.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* SeamEditorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeamEditorState.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* Plushboii.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Plushboii.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000007 /* Plushboii.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Plushboii.entitlements; sourceTree = "<group>"; };
+		A20000000000000000000010 /* VectorMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VectorMath.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* FlatteningTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlatteningTypes.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* SurfaceCutter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceCutter.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* LSCMSolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LSCMSolver.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* DistortionVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistortionVerifier.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* DartPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DartPlanner.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 /* TopologyEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopologyEngine.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000002 /* Plushboii */,
+				A20000000000000000000007 /* Plushboii.entitlements */,
+				A40000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A40000000000000000000002 /* Plushboii */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* PlushboiiApp.swift */,
+				A20000000000000000000002 /* Models.swift */,
+				A20000000000000000000003 /* MeshyClient.swift */,
+				A20000000000000000000004 /* ContentView.swift */,
+				A20000000000000000000005 /* MeshSceneView.swift */,
+				A20000000000000000000008 /* MeshTopology.swift */,
+				A20000000000000000000009 /* SeamEditorState.swift */,
+				A40000000000000000000010 /* Topology */,
+			);
+			path = Plushboii;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (A20000000000000000000006 /* Plushboii.app */);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000010 /* Topology */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000010 /* VectorMath.swift */,
+				A20000000000000000000011 /* FlatteningTypes.swift */,
+				A20000000000000000000012 /* SurfaceCutter.swift */,
+				A20000000000000000000013 /* LSCMSolver.swift */,
+				A20000000000000000000014 /* DistortionVerifier.swift */,
+				A20000000000000000000015 /* DartPlanner.swift */,
+				A20000000000000000000016 /* TopologyEngine.swift */,
+			);
+			path = Topology;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* Plushboii */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A70000000000000000000002 /* Build configuration list for PBXNativeTarget "Plushboii" */;
+			buildPhases = (
+				A80000000000000000000001 /* Sources */,
+				A30000000000000000000001 /* Frameworks */,
+				A80000000000000000000002 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = Plushboii;
+			productName = Plushboii;
+			productReference = A20000000000000000000006 /* Plushboii.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A60000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsIn parallel = 1;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A50000000000000000000001 = {CreatedOnToolsVersion = 16.0; };
+				};
+			};
+			buildConfigurationList = A70000000000000000000001 /* Build configuration list for PBXProject "Plushboii" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = A40000000000000000000001;
+			productRefGroup = A40000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A50000000000000000000001 /* Plushboii */);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A80000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* PlushboiiApp.swift in Sources */,
+				A10000000000000000000002 /* Models.swift in Sources */,
+				A10000000000000000000003 /* MeshyClient.swift in Sources */,
+				A10000000000000000000004 /* ContentView.swift in Sources */,
+				A10000000000000000000005 /* MeshSceneView.swift in Sources */,
+				A10000000000000000000006 /* MeshTopology.swift in Sources */,
+				A10000000000000000000007 /* SeamEditorState.swift in Sources */,
+				A10000000000000000000010 /* VectorMath.swift in Sources */,
+				A10000000000000000000011 /* FlatteningTypes.swift in Sources */,
+				A10000000000000000000012 /* SurfaceCutter.swift in Sources */,
+				A10000000000000000000013 /* LSCMSolver.swift in Sources */,
+				A10000000000000000000014 /* DistortionVerifier.swift in Sources */,
+				A10000000000000000000015 /* DartPlanner.swift in Sources */,
+				A10000000000000000000016 /* TopologyEngine.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A80000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A90000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				ARCHS = arm64;
+			};
+			name = Debug;
+		};
+		A90000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				ARCHS = arm64;
+			};
+			name = Release;
+		};
+		A90000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Plushboii/Plushboii.entitlements;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.Plushboii;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				ARCHS = arm64;
+			};
+			name = Debug;
+		};
+		A90000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Plushboii/Plushboii.entitlements;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.Plushboii;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				ARCHS = arm64;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A70000000000000000000001 /* Build configuration list for PBXProject "Plushboii" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A90000000000000000000001 /* Debug */, A90000000000000000000002 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A70000000000000000000002 /* Build configuration list for PBXNativeTarget "Plushboii" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A90000000000000000000003 /* Debug */, A90000000000000000000004 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A60000000000000000000001 /* Project object */;
+}
