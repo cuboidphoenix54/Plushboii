@@ -1,5 +1,8 @@
 import XCTest
 @testable import TopologyKit
+#if canImport(PDFKit)
+import PDFKit
+#endif
 
 final class PatternOutputTests: XCTestCase {
     private func island(width: Double, height: Double, n: Int = 8, segment: Int = 0) -> UVIsland {
@@ -138,4 +141,23 @@ final class PatternOutputTests: XCTestCase {
         XCTAssertLessThanOrEqual(sheet.calibration.maxX, TilePlan.windowSize.x)
         XCTAssertLessThanOrEqual(sheet.calibration.maxY, TilePlan.windowSize.y)
     }
+
+    #if canImport(PDFKit)
+    func testImportedFlatMeshCanBeFlattenedAndExportedAsTiledPDF() async throws {
+        let positions = [
+            Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0),
+        ]
+        let triangles: [Int32] = [0, 1, 2, 0, 2, 3]
+        let result = try TopologyEngine.flatten(positions: positions, triangles: triangles, seams: [])
+
+        let outputs = try await PatternPrintPipeline.export(result: result, centimetersPerUnit: 10)
+
+        let pdf = try XCTUnwrap(PDFDocument(data: outputs.tiledPDF))
+        XCTAssertEqual(pdf.pageCount, outputs.tiledPageCount)
+        XCTAssertGreaterThan(pdf.pageCount, 0)
+        XCTAssertEqual(outputs.sheet.pieces.count, 1)
+        XCTAssertEqual(outputs.sheet.calibration.width, PatternUnits.calibrationSidePoints, accuracy: 1e-9)
+        XCTAssertEqual(outputs.sheet.calibration.height, PatternUnits.calibrationSidePoints, accuracy: 1e-9)
+    }
+    #endif
 }

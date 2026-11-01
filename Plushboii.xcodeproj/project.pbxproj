@@ -1,7 +1,8 @@
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
-	classes = {};
+	classes = {
+	};
 	objectVersion = 56;
 	objects = {
 
@@ -21,6 +22,7 @@
 		A10000000000000000000015 /* DartPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* DartPlanner.swift */; };
 		A10000000000000000000016 /* TopologyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* TopologyEngine.swift */; };
 		A10000000000000000000030 /* PatternGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* PatternGeometry.swift */; };
+		A10000000000000000000093 /* PatternExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000093 /* PatternExtras.swift */; };
 		A10000000000000000000031 /* PatternLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* PatternLayout.swift */; };
 		A10000000000000000000032 /* PatternRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* PatternRenderer.swift */; };
 		A10000000000000000000033 /* PatternPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* PatternPDFExporter.swift */; };
@@ -29,11 +31,30 @@
 		A10000000000000000000041 /* MeshIngestion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* MeshIngestion.swift */; };
 		A10000000000000000000042 /* LocalMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* LocalMeshProvider.swift */; };
 		A10000000000000000000043 /* APIMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* APIMeshProvider.swift */; };
+		A10000000000000000000044 /* STLReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* STLReader.swift */; };
 		A10000000000000000000045 /* CoreMLMeshProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* CoreMLMeshProvider.swift */; };
 		A10000000000000000000046 /* LocalLRMTensorParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000046 /* LocalLRMTensorParser.swift */; };
 		A10000000000000000000047 /* MarchingTetrahedra.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000047 /* MarchingTetrahedra.swift */; };
 		A10000000000000000000048 /* TripoSR_DensityPipeline.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000048 /* TripoSR_DensityPipeline.mlpackage */; };
-		A10000000000000000000044 /* STLReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* STLReader.swift */; };
+		A10000000000000000000049 /* OBJMeshReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000049 /* OBJMeshReader.swift */; };
+		A10000000000000000000050 /* SeamSuggestionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000050 /* SeamSuggestionEngine.swift */; };
+		A10000000000000000000051 /* OnDeviceSeamAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000051 /* OnDeviceSeamAdvisor.swift */; };
+		A10000000000000000000052 /* PatternDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000052 /* PatternDomain.swift */; };
+		A10000000000000000000053 /* AreaPreservingUVRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000054 /* AreaPreservingUVRefiner.swift */; };
+		A10000000000000000000095 /* OpenPieceSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000095 /* OpenPieceSeams.swift */; };
+		A10000000000000000000096 /* StagedAnatomySplit.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000096 /* StagedAnatomySplit.swift */; };
+		A10000000000000000000097 /* JointProposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000097 /* JointProposer.swift */; };
+		A10000000000000000000094 /* MeshRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000094 /* MeshRepair.swift */; };
+		A10000000000000000000098 /* ARAPRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000098 /* ARAPRefiner.swift */; };
+		A10000000000000000000099 /* MeshSmoothing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000099 /* MeshSmoothing.swift */; };
+		A10000000000000000000093 /* PatternExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000093 /* PatternExtras.swift */; };
+		A10000000000000000000092 /* ModelPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000092 /* ModelPreparation.swift */; };
+		A10000000000000000000091 /* PieceCongruence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000091 /* PieceCongruence.swift */; };
+		A10000000000000000000090 /* PatternQualityMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000090 /* PatternQualityMap.swift */; };
+		A10000000000000000000054 /* PanelSplitPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000055 /* PanelSplitPlanner.swift */; };
+		A10000000000000000000055 /* MeshComponentSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000056 /* MeshComponentSplitter.swift */; };
+		A10000000000000000000056 /* AnatomicalMeshSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000057 /* AnatomicalMeshSplitter.swift */; };
+		A10000000000000000000057 /* AnatomyMeshViewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000058 /* AnatomyMeshViewRenderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,10 +63,10 @@
 		A20000000000000000000003 /* MeshyClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshyClient.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* MeshSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshSceneView.swift; sourceTree = "<group>"; };
-		A20000000000000000000008 /* MeshTopology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshTopology.swift; sourceTree = "<group>"; };
-		A20000000000000000000009 /* SeamEditorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeamEditorState.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* Plushboii.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Plushboii.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000007 /* Plushboii.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Plushboii.entitlements; sourceTree = "<group>"; };
+		A20000000000000000000008 /* MeshTopology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshTopology.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* SeamEditorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeamEditorState.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* VectorMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VectorMath.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* FlatteningTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlatteningTypes.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* SurfaceCutter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceCutter.swift; sourceTree = "<group>"; };
@@ -54,6 +75,7 @@
 		A20000000000000000000015 /* DartPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DartPlanner.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* TopologyEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopologyEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000030 /* PatternGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternGeometry.swift; sourceTree = "<group>"; };
+		A20000000000000000000093 /* PatternExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternExtras.swift; sourceTree = "<group>"; };
 		A20000000000000000000031 /* PatternLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternLayout.swift; sourceTree = "<group>"; };
 		A20000000000000000000032 /* PatternRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternRenderer.swift; sourceTree = "<group>"; };
 		A20000000000000000000033 /* PatternPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternPDFExporter.swift; sourceTree = "<group>"; };
@@ -62,18 +84,38 @@
 		A20000000000000000000041 /* MeshIngestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshIngestion.swift; sourceTree = "<group>"; };
 		A20000000000000000000042 /* LocalMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMeshProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000043 /* APIMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIMeshProvider.swift; sourceTree = "<group>"; };
+		A20000000000000000000044 /* STLReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = STLReader.swift; sourceTree = "<group>"; };
 		A20000000000000000000045 /* CoreMLMeshProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreMLMeshProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000046 /* LocalLRMTensorParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLRMTensorParser.swift; sourceTree = "<group>"; };
 		A20000000000000000000047 /* MarchingTetrahedra.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarchingTetrahedra.swift; sourceTree = "<group>"; };
 		A20000000000000000000048 /* TripoSR_DensityPipeline.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = TripoSR_DensityPipeline.mlpackage; sourceTree = "<group>"; };
-		A20000000000000000000044 /* STLReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = STLReader.swift; sourceTree = "<group>"; };
+		A20000000000000000000049 /* OBJMeshReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OBJMeshReader.swift; sourceTree = "<group>"; };
+		A20000000000000000000050 /* SeamSuggestionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeamSuggestionEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000051 /* OnDeviceSeamAdvisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceSeamAdvisor.swift; sourceTree = "<group>"; };
+		A20000000000000000000052 /* PatternDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternDomain.swift; sourceTree = "<group>"; };
+		A20000000000000000000053 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000054 /* AreaPreservingUVRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaPreservingUVRefiner.swift; sourceTree = "<group>"; };
+		A20000000000000000000095 /* OpenPieceSeams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenPieceSeams.swift; sourceTree = "<group>"; };
+		A20000000000000000000096 /* StagedAnatomySplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagedAnatomySplit.swift; sourceTree = "<group>"; };
+		A20000000000000000000097 /* JointProposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointProposer.swift; sourceTree = "<group>"; };
+		A20000000000000000000094 /* MeshRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshRepair.swift; sourceTree = "<group>"; };
+		A20000000000000000000098 /* ARAPRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARAPRefiner.swift; sourceTree = "<group>"; };
+		A20000000000000000000099 /* MeshSmoothing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshSmoothing.swift; sourceTree = "<group>"; };
+		A20000000000000000000092 /* ModelPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreparation.swift; sourceTree = "<group>"; };
+		A20000000000000000000091 /* PieceCongruence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceCongruence.swift; sourceTree = "<group>"; };
+		A20000000000000000000090 /* PatternQualityMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternQualityMap.swift; sourceTree = "<group>"; };
+		A20000000000000000000055 /* PanelSplitPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelSplitPlanner.swift; sourceTree = "<group>"; };
+		A20000000000000000000056 /* MeshComponentSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshComponentSplitter.swift; sourceTree = "<group>"; };
+		A20000000000000000000057 /* AnatomicalMeshSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnatomicalMeshSplitter.swift; sourceTree = "<group>"; };
+		A20000000000000000000058 /* AnatomyMeshViewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnatomyMeshViewRenderer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -96,6 +138,7 @@
 				A20000000000000000000002 /* Models.swift */,
 				A20000000000000000000003 /* MeshyClient.swift */,
 				A20000000000000000000004 /* ContentView.swift */,
+				A20000000000000000000053 /* Info.plist */,
 				A20000000000000000000005 /* MeshSceneView.swift */,
 				A20000000000000000000008 /* MeshTopology.swift */,
 				A20000000000000000000009 /* SeamEditorState.swift */,
@@ -108,7 +151,9 @@
 		};
 		A40000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
-			children = (A20000000000000000000006 /* Plushboii.app */);
+			children = (
+				A20000000000000000000006 /* Plushboii.app */,
+			);
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -122,6 +167,23 @@
 				A20000000000000000000014 /* DistortionVerifier.swift */,
 				A20000000000000000000015 /* DartPlanner.swift */,
 				A20000000000000000000016 /* TopologyEngine.swift */,
+				A20000000000000000000050 /* SeamSuggestionEngine.swift */,
+				A20000000000000000000051 /* OnDeviceSeamAdvisor.swift */,
+				A20000000000000000000052 /* PatternDomain.swift */,
+				A20000000000000000000054 /* AreaPreservingUVRefiner.swift */,
+				A20000000000000000000094 /* MeshRepair.swift */,
+				A20000000000000000000098 /* ARAPRefiner.swift */,
+				A20000000000000000000099 /* MeshSmoothing.swift */,
+				A20000000000000000000097 /* JointProposer.swift */,
+				A20000000000000000000096 /* StagedAnatomySplit.swift */,
+				A20000000000000000000095 /* OpenPieceSeams.swift */,
+				A20000000000000000000092 /* ModelPreparation.swift */,
+				A20000000000000000000091 /* PieceCongruence.swift */,
+				A20000000000000000000090 /* PatternQualityMap.swift */,
+				A20000000000000000000055 /* PanelSplitPlanner.swift */,
+				A20000000000000000000056 /* MeshComponentSplitter.swift */,
+				A20000000000000000000057 /* AnatomicalMeshSplitter.swift */,
+				A20000000000000000000058 /* AnatomyMeshViewRenderer.swift */,
 			);
 			path = Topology;
 			sourceTree = "<group>";
@@ -130,6 +192,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000030 /* PatternGeometry.swift */,
+				A20000000000000000000093 /* PatternExtras.swift */,
 				A20000000000000000000031 /* PatternLayout.swift */,
 				A20000000000000000000032 /* PatternRenderer.swift */,
 				A20000000000000000000033 /* PatternPDFExporter.swift */,
@@ -146,6 +209,7 @@
 				A20000000000000000000042 /* LocalMeshProvider.swift */,
 				A20000000000000000000043 /* APIMeshProvider.swift */,
 				A20000000000000000000044 /* STLReader.swift */,
+				A20000000000000000000049 /* OBJMeshReader.swift */,
 				A20000000000000000000047 /* MarchingTetrahedra.swift */,
 				A20000000000000000000046 /* LocalLRMTensorParser.swift */,
 				A20000000000000000000045 /* CoreMLMeshProvider.swift */,
@@ -164,8 +228,10 @@
 				A30000000000000000000001 /* Frameworks */,
 				A80000000000000000000002 /* Resources */,
 			);
-			buildRules = ();
-			dependencies = ();
+			buildRules = (
+			);
+			dependencies = (
+			);
 			name = Plushboii;
 			productName = Plushboii;
 			productReference = A20000000000000000000006 /* Plushboii.app */;
@@ -178,23 +244,41 @@
 			isa = PBXProject;
 			attributes = {
 				"BuildIndependentTargetsIn parallel" = 1;
-				LastUpgradeCheck = 1600;
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2710;
 				TargetAttributes = {
-					A50000000000000000000001 = {CreatedOnToolsVersion = 16.0; };
+					A50000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
 				};
 			};
 			buildConfigurationList = A70000000000000000000001 /* Build configuration list for PBXProject "Plushboii" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-			knownRegions = (en, Base);
+			knownRegions = (
+				en,
+				Base,
+			);
 			mainGroup = A40000000000000000000001;
 			productRefGroup = A40000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (A50000000000000000000001 /* Plushboii */);
+			targets = (
+				A50000000000000000000001 /* Plushboii */,
+			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A80000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A80000000000000000000001 /* Sources */ = {
@@ -213,11 +297,13 @@
 				A10000000000000000000042 /* LocalMeshProvider.swift in Sources */,
 				A10000000000000000000043 /* APIMeshProvider.swift in Sources */,
 				A10000000000000000000044 /* STLReader.swift in Sources */,
+				A10000000000000000000049 /* OBJMeshReader.swift in Sources */,
 				A10000000000000000000048 /* TripoSR_DensityPipeline.mlpackage in Sources */,
 				A10000000000000000000047 /* MarchingTetrahedra.swift in Sources */,
 				A10000000000000000000046 /* LocalLRMTensorParser.swift in Sources */,
 				A10000000000000000000045 /* CoreMLMeshProvider.swift in Sources */,
 				A10000000000000000000030 /* PatternGeometry.swift in Sources */,
+				A10000000000000000000093 /* PatternExtras.swift in Sources */,
 				A10000000000000000000031 /* PatternLayout.swift in Sources */,
 				A10000000000000000000032 /* PatternRenderer.swift in Sources */,
 				A10000000000000000000033 /* PatternPDFExporter.swift in Sources */,
@@ -229,44 +315,113 @@
 				A10000000000000000000014 /* DistortionVerifier.swift in Sources */,
 				A10000000000000000000015 /* DartPlanner.swift in Sources */,
 				A10000000000000000000016 /* TopologyEngine.swift in Sources */,
+				A10000000000000000000050 /* SeamSuggestionEngine.swift in Sources */,
+				A10000000000000000000051 /* OnDeviceSeamAdvisor.swift in Sources */,
+				A10000000000000000000052 /* PatternDomain.swift in Sources */,
+				A10000000000000000000053 /* AreaPreservingUVRefiner.swift in Sources */,
+				A10000000000000000000094 /* MeshRepair.swift in Sources */,
+				A10000000000000000000098 /* ARAPRefiner.swift in Sources */,
+				A10000000000000000000099 /* MeshSmoothing.swift in Sources */,
+				A10000000000000000000097 /* JointProposer.swift in Sources */,
+				A10000000000000000000096 /* StagedAnatomySplit.swift in Sources */,
+				A10000000000000000000095 /* OpenPieceSeams.swift in Sources */,
+				A10000000000000000000092 /* ModelPreparation.swift in Sources */,
+				A10000000000000000000091 /* PieceCongruence.swift in Sources */,
+				A10000000000000000000090 /* PatternQualityMap.swift in Sources */,
+				A10000000000000000000054 /* PanelSplitPlanner.swift in Sources */,
+				A10000000000000000000055 /* MeshComponentSplitter.swift in Sources */,
+				A10000000000000000000056 /* AnatomicalMeshSplitter.swift in Sources */,
+				A10000000000000000000057 /* AnatomyMeshViewRenderer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXResourcesBuildPhase section */
-		A80000000000000000000002 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = ();
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXResourcesBuildPhase section */
-
 /* Begin XCBuildConfiguration section */
 		A90000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 6.0;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
-				ARCHS = arm64;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
 		A90000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 6.0;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_STRICT_CONCURRENCY = complete;
-				ARCHS = arm64;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -274,17 +429,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Plushboii/Plushboii.entitlements;
+				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
-				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Plushboii/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.Plushboii;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
 				SWIFT_STRICT_CONCURRENCY = complete;
-				ARCHS = arm64;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -292,17 +446,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Plushboii/Plushboii.entitlements;
+				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
-				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Plushboii/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.Plushboii;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
 				SWIFT_STRICT_CONCURRENCY = complete;
-				ARCHS = arm64;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -311,13 +464,19 @@
 /* Begin XCConfigurationList section */
 		A70000000000000000000001 /* Build configuration list for PBXProject "Plushboii" */ = {
 			isa = XCConfigurationList;
-			buildConfigurations = (A90000000000000000000001 /* Debug */, A90000000000000000000002 /* Release */);
+			buildConfigurations = (
+				A90000000000000000000001 /* Debug */,
+				A90000000000000000000002 /* Release */,
+			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		A70000000000000000000002 /* Build configuration list for PBXNativeTarget "Plushboii" */ = {
 			isa = XCConfigurationList;
-			buildConfigurations = (A90000000000000000000003 /* Debug */, A90000000000000000000004 /* Release */);
+			buildConfigurations = (
+				A90000000000000000000003 /* Debug */,
+				A90000000000000000000004 /* Release */,
+			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

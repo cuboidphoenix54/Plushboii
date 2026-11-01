@@ -25,6 +25,7 @@ final class SeamEditorState {
     private(set) var message: String?
 
     @ObservationIgnored private var startsNewSeam = false
+    @ObservationIgnored private var lastSuggestionSeamCount = 0
 
     func load(piece: PatternPiece?) async {
         mesh = nil
@@ -32,6 +33,7 @@ final class SeamEditorState {
         loadedPieceID = nil
         message = nil
         startsNewSeam = false
+        lastSuggestionSeamCount = 0
         guard let piece else { return }
 
         let pieceID = piece.id
@@ -64,11 +66,30 @@ final class SeamEditorState {
 
     func startNewSeam() {
         startsNewSeam = true
+        lastSuggestionSeamCount = 0
         message = "Next click starts a new seam."
+    }
+
+    func applySuggestion(_ paths: [[Int]]) {
+        guard let topology = mesh, !paths.isEmpty,
+              paths.allSatisfy({ vertices in
+                  vertices.count >= 2
+                      && vertices.allSatisfy(topology.positions.indices.contains)
+                      && zip(vertices, vertices.dropFirst()).allSatisfy(topology.isAdjacent)
+              })
+        else {
+            message = "That suggested panel layout contains a cut that is not connected on this mesh."
+            return
+        }
+        seams.append(contentsOf: paths.map { SeamPath(vertices: $0, anchorEnds: [1, $0.count]) })
+        lastSuggestionSeamCount = paths.count
+        startsNewSeam = false
+        message = "Suggested panel layout applied. Use the seam tool to edit it, or Undo to remove the layout."
     }
 
     func pick(vertex: Int, startingNewSeam shiftHeld: Bool) async {
         guard let topology = mesh, !isBusy, topology.positions.indices.contains(vertex) else { return }
+        lastSuggestionSeamCount = 0
         isBusy = true
         defer { isBusy = false }
         message = nil
@@ -102,6 +123,7 @@ final class SeamEditorState {
             message = "A loop needs at least three picks."
             return
         }
+        lastSuggestionSeamCount = 0
         isBusy = true
         defer { isBusy = false }
         let path = await Task.detached(priority: .userInitiated) {
@@ -119,6 +141,12 @@ final class SeamEditorState {
     }
 
     func undo() {
+        if lastSuggestionSeamCount > 0 {
+            seams.removeLast(min(lastSuggestionSeamCount, seams.count))
+            lastSuggestionSeamCount = 0
+            message = "Suggested panel layout removed."
+            return
+        }
         guard var seam = seams.last else { return }
         if seam.anchorEnds.count <= 1 {
             seams.removeLast()
@@ -133,6 +161,7 @@ final class SeamEditorState {
     func clearAll() {
         seams = []
         startsNewSeam = false
+        lastSuggestionSeamCount = 0
         message = nil
     }
 }

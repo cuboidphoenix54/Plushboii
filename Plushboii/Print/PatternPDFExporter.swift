@@ -15,8 +15,8 @@ struct PatternOutputs: Sendable {
 enum PatternPrintPipeline {
     /// Lays out the flattened islands once, then renders both formats concurrently.
     /// Nothing is produced if any island has no valid outline or either PDF fails validation.
-    static func export(result: FlatteningResult, centimetersPerUnit: Double) async throws -> PatternOutputs {
-        let sheet = try PatternLayout.makeSheet(from: result, centimetersPerUnit: centimetersPerUnit)
+    static func export(result: FlatteningResult, centimetersPerUnit: Double, options: LayoutOptions = LayoutOptions()) async throws -> PatternOutputs {
+        let sheet = try PatternLayout.makeSheet(from: result, centimetersPerUnit: centimetersPerUnit, options: options)
         async let a0 = PatternPDFExporter.a0PDF(sheet)
         async let tiled = PatternPDFExporter.tiledPDF(sheet)
         let (a0Data, tiledResult) = try await (a0, tiled)

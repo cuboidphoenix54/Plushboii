@@ -95,6 +95,42 @@ final class MeshIngestionTests: XCTestCase {
     func testMalformedASCIISTLIsRejected() {
         XCTAssertThrowsError(try STLMeshReader.read(Data("solid broken vertex 0 1 endsolid".utf8)))
     }
+
+    func testOBJFacesWithMaterialsNegativeIndicesAndQuadsAreTriangulated() throws {
+        let obj = """
+        mtllib missing-materials.mtl
+        o square
+        v 0 0 0
+        v 1 0 0
+        v 1 1 0
+        v 0 1 0
+        vt 0 0
+        vn 0 0 1
+        usemtl missing
+        f -4/1/1 -3/1/1 -2/1/1 -1/1/1
+        """
+
+        let mesh = try OBJMeshReader.read(Data(obj.utf8))
+
+        XCTAssertEqual(mesh.vertices.count, 4)
+        XCTAssertEqual(mesh.triangles, [
+            MeshTriangle(a: 0, b: 1, c: 2),
+            MeshTriangle(a: 0, b: 2, c: 3),
+        ])
+    }
+
+    func testOBJRejectsFaceIndicesWithoutVerticesAndFilesWithoutFaces() {
+        XCTAssertThrowsError(try OBJMeshReader.read(Data("f 1 2 3\n".utf8)))
+        XCTAssertThrowsError(try OBJMeshReader.read(Data("v 0 0 0\nv 1 0 0\nv 0 1 0\n".utf8)))
+    }
+
+    func testOBJSupportsUTF8BOMAndContinuedFaceLines() throws {
+        let obj = "\u{FEFF}v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 \\\n 3\n"
+
+        let mesh = try OBJMeshReader.read(Data(obj.utf8))
+
+        XCTAssertEqual(mesh.triangles, [MeshTriangle(a: 0, b: 1, c: 2)])
+    }
 }
 
 import CoreML

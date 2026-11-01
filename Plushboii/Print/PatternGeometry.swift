@@ -127,6 +127,19 @@ enum PatternGeometry {
     /// Outer boundary of an island, counter-clockwise, as island UV points. Interior edges are traversed twice
     /// in opposite directions by consistently wound triangles, so only edges without a reverse twin remain.
     static func boundaryLoop(of island: UVIsland) throws -> [Vec2] {
+        var points: [Vec2] = []
+        for index in try boundaryIndices(of: island) {
+            let p = island.uv[Int(index)]
+            if let last = points.last, vlength(p - last) < 1e-12 { continue }
+            points.append(p)
+        }
+        if points.count > 1, vlength(points[0] - points[points.count - 1]) < 1e-12 { points.removeLast() }
+        guard points.count >= 3 else { throw PatternOutputError.boundaryUnavailable(segment: island.segmentIndex) }
+        return points
+    }
+
+    /// Island-local vertex indices of the outer boundary, counter-clockwise, without removing coincident points.
+    static func boundaryIndices(of island: UVIsland) throws -> [Int32] {
         func key(_ a: Int32, _ b: Int32) -> UInt64 { UInt64(UInt32(bitPattern: a)) << 32 | UInt64(UInt32(bitPattern: b)) }
 
         var counts: [UInt64: Int] = [:]
@@ -155,29 +168,34 @@ enum PatternGeometry {
         }
         guard loop.count == next.count else { throw unavailable }
 
-        var points: [Vec2] = []
-        for index in loop {
-            let p = island.uv[Int(index)]
-            if let last = points.last, vlength(p - last) < 1e-12 { continue }
-            points.append(p)
-        }
-        if points.count > 1, vlength(points[0] - points[points.count - 1]) < 1e-12 { points.removeLast() }
-        guard points.count >= 3 else { throw unavailable }
-
         var signedArea = 0.0
-        for i in points.indices {
-            let a = points[i], b = points[(i + 1) % points.count]
+        for i in loop.indices {
+            let a = island.uv[Int(loop[i])], b = island.uv[Int(loop[(i + 1) % loop.count])]
             signedArea += a.x * b.y - b.x * a.y
         }
-        guard abs(signedArea) > 1e-18 else { throw unavailable }
-        return signedArea > 0 ? points : points.reversed()
+        guard loop.count >= 3, abs(signedArea) > 1e-18 else { throw unavailable }
+        return signedArea > 0 ? loop : loop.reversed()
     }
 
     // MARK: Smooth boundary
 
+    /// Laplacian relaxation of a closed polyline; vertices move halfway toward their neighbours' midpoint.
+    static func relaxed(_ points: [Vec2], passes: Int) -> [Vec2] {
+        var current = points
+        let n = points.count
+        guard passes > 0, n >= 3 else { return points }
+        for _ in 0..<passes {
+            current = (0..<n).map { i in
+                let mid = (current[(i + n - 1) % n] + current[(i + 1) % n]) * 0.5
+                return (current[i] + mid) * 0.5
+            }
+        }
+        return current
+    }
+
     /// Cubic Hermite boundary through every vertex. Tangents follow the local bisector so the curve is G1 on
     /// smooth stretches, while turns sharper than `cornerAngle` (seam corners, dart apexes) stay sharp.
-    static func smoothClosedPath(through points: [Vec2]) -> ClosedBezierPath {
+    static func smoothClosedPath(through points: [Vec2], allCorners: Bool = false) -> ClosedBezierPath {
         let n = points.count
         var tangentIn = [Vec2](repeating: .zero, count: n)
         var tangentOut = [Vec2](repeating: .zero, count: n)
@@ -187,7 +205,7 @@ enum PatternGeometry {
             let incoming = unit(points[i] - points[(i + n - 1) % n])
             let outgoing = unit(points[(i + 1) % n] - points[i])
             let turn = acos(min(1, max(-1, vdot(incoming, outgoing))))
-            if turn > cornerAngle {
+            if allCorners || turn > cornerAngle {
                 corner[i] = true
                 tangentIn[i] = incoming
                 tangentOut[i] = outgoing

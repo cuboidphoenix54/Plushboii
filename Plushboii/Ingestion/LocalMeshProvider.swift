@@ -22,7 +22,7 @@ final class LocalMeshProvider: MeshIngestionService {
     }
 }
 
-/// Reads `.stl` directly and `.obj`/`.usdz` through `MDLAsset`. Everything here is blocking and must run off the main actor.
+/// Reads `.stl` and `.obj` directly and `.usdz` through `MDLAsset`. Everything here is blocking and must run off the main actor.
 enum ModelIOMeshReader {
     static let maximumFileBytes = 512 * 1024 * 1024
     static let supportedExtensions: Set<String> = ["stl", "obj", "usdz"]
@@ -38,7 +38,7 @@ enum ModelIOMeshReader {
         guard supportedExtensions.contains(ext) else {
             throw MeshIngestionError.unsupportedFormat(ext)
         }
-        guard ext == "stl" || MDLAsset.canImportFileExtension(ext) else {
+        guard ext == "stl" || ext == "obj" || MDLAsset.canImportFileExtension(ext) else {
             throw MeshIngestionError.unsupportedFormat(ext)
         }
 
@@ -69,6 +69,16 @@ enum ModelIOMeshReader {
         if ext == "stl" {
             do {
                 return try STLMeshReader.read(Data(contentsOf: url))
+            } catch let error as MeshIngestionError {
+                throw error
+            } catch {
+                throw MeshIngestionError.unreadableFile(error.localizedDescription)
+            }
+        }
+
+        if ext == "obj" {
+            do {
+                return try OBJMeshReader.read(Data(contentsOf: url))
             } catch let error as MeshIngestionError {
                 throw error
             } catch {

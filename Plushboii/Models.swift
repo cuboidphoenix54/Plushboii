@@ -7,6 +7,7 @@ final class Pattern {
     var name: String
     var createdAt: Date
     var modifiedAt: Date
+    var domainRawValue: String = PatternDomain.plushie.rawValue
 
     @Relationship(deleteRule: .cascade, inverse: \PatternPiece.pattern)
     var pieces: [PatternPiece]
@@ -16,12 +17,14 @@ final class Pattern {
         name: String,
         createdAt: Date = .now,
         modifiedAt: Date = .now,
+        domainRawValue: String = PatternDomain.plushie.rawValue,
         pieces: [PatternPiece] = []
     ) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
+        self.domainRawValue = domainRawValue
         self.pieces = pieces
     }
 }

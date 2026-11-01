@@ -38,7 +38,20 @@ enum PatternRenderer {
             ctx.strokePath()
 
             let b = piece.seamLine.bounds
-            drawText(piece.label, at: CGPoint(x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2), size: 14, centered: true, in: ctx)
+            let center = CGPoint(x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2)
+            var caption = piece.label
+            if piece.copies > 1 {
+                caption += " - cut \(piece.copies)"
+                if piece.mirroredCopies > 0 { caption += " (\(piece.mirroredCopies) mirrored)" }
+            }
+            drawText(caption, at: center, size: 14, centered: true, in: ctx)
+
+            ctx.setLineDash(phase: 0, lengths: [])
+            for label in piece.seamLabels {
+                drawText(label.text, at: CGPoint(x: label.position.x, y: label.position.y), size: 6, centered: true, angle: label.angle, in: ctx)
+            }
+            if let arrow = piece.furArrow { drawArrow(arrow, in: ctx) }
+            for detail in piece.details { drawDetail(detail, in: ctx) }
         }
 
         ctx.setLineDash(phase: 0, lengths: [])
@@ -88,7 +101,7 @@ enum PatternRenderer {
         drawText(caption, at: CGPoint(x: TilePlan.pageSize.x / 2, y: TilePlan.pageSize.y - 14), size: 9, centered: true, in: ctx)
     }
 
-    static func drawText(_ text: String, at point: CGPoint, size: CGFloat, centered: Bool, in ctx: CGContext) {
+    static func drawText(_ text: String, at point: CGPoint, size: CGFloat, centered: Bool, angle: Double = 0, in ctx: CGContext) {
         let font = CTFontCreateWithName("Helvetica" as CFString, size, nil)
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font,
@@ -97,10 +110,46 @@ enum PatternRenderer {
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
         let width = CTLineGetTypographicBounds(line, nil, nil, nil)
         ctx.saveGState()
+        ctx.translateBy(x: point.x, y: point.y)
+        ctx.rotate(by: angle)
         ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
-        ctx.textPosition = CGPoint(x: point.x - (centered ? width / 2 : 0), y: point.y)
+        ctx.textPosition = CGPoint(x: -(centered ? width / 2 : 0), y: angle == 0 ? 0 : size * 0.35)
         CTLineDraw(line, ctx)
         ctx.restoreGState()
+    }
+
+    /// Double-headed nap arrow: the fabric's pile and stretch run along this line.
+    static func drawArrow(_ arrow: FurArrow, in ctx: CGContext) {
+        ctx.setLineWidth(0.75)
+        ctx.move(to: CGPoint(x: arrow.start.x, y: arrow.start.y))
+        ctx.addLine(to: CGPoint(x: arrow.end.x, y: arrow.end.y))
+        let d = arrow.end - arrow.start
+        let length = vlength(d)
+        guard length > 1e-9 else { return }
+        let u = d / length, n = Vec2(-u.y, u.x)
+        let head = min(6, length / 3)
+        for (tip, sign) in [(arrow.end, -1.0), (arrow.start, 1.0)] {
+            let base = tip + u * (sign * head)
+            ctx.move(to: CGPoint(x: tip.x, y: tip.y)); ctx.addLine(to: CGPoint(x: base.x + n.x * head / 2, y: base.y + n.y * head / 2))
+            ctx.move(to: CGPoint(x: tip.x, y: tip.y)); ctx.addLine(to: CGPoint(x: base.x - n.x * head / 2, y: base.y - n.y * head / 2))
+        }
+        ctx.strokePath()
+    }
+
+    /// Crosshair in a circle at the detail position, with a tick marking its "up" direction.
+    static func drawDetail(_ detail: PlacedDetail, in ctx: CGContext) {
+        ctx.setLineWidth(0.5)
+        let c = CGPoint(x: detail.center.x, y: detail.center.y)
+        let r = max(detail.radius, 3)
+        ctx.strokeEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
+        ctx.move(to: CGPoint(x: c.x - r, y: c.y)); ctx.addLine(to: CGPoint(x: c.x + r, y: c.y))
+        ctx.move(to: CGPoint(x: c.x, y: c.y - r)); ctx.addLine(to: CGPoint(x: c.x, y: c.y + r))
+        ctx.strokePath()
+        let up = CGPoint(x: c.x + sin(detail.rotation) * (r + 4), y: c.y - cos(detail.rotation) * (r + 4))
+        ctx.move(to: CGPoint(x: c.x + sin(detail.rotation) * r, y: c.y - cos(detail.rotation) * r))
+        ctx.addLine(to: up)
+        ctx.strokePath()
+        drawText(detail.name, at: CGPoint(x: c.x, y: c.y + r + 9), size: 6, centered: true, in: ctx)
     }
 }
 #endif

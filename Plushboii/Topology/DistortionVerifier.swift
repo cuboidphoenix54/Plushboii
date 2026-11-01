@@ -21,6 +21,8 @@ enum DistortionVerifier {
         return TriangleAreas(area3D: area3D, signedArea2D: area2D)
     }
 
+    static let collapseFraction = 1e-3
+
     static func verify(
         positions: [Vec3],
         triangles: [Int32],
@@ -40,8 +42,9 @@ enum DistortionVerifier {
         var weighted = [Double](repeating: 0, count: areas.area3D.count)
         var maximum = 0.0
         for t in areas.area3D.indices {
-            if areas.signedArea2D[t] <= 0 { flipped += 1 }
             let reference = areas.area3D[t] * areaFactor
+            // Inverted or collapsed (under 0.1% of its 3D area) triangles cannot be sewn.
+            if areas.signedArea2D[t] <= collapseFraction * reference { flipped += 1 }
             let local = reference > 0 ? abs(magnitude2D[t] / reference - 1) : .infinity
             weighted[t] = local * areas.area3D[t]
             maximum = max(maximum, local)

@@ -81,7 +81,21 @@ enum MeshSchemaEnforcer {
                 throw MeshIngestionError.invalidMesh("triangle \(index) is degenerate")
             }
         }
-        return mesh
+        return repairedNonManifold(mesh)
+    }
+
+    /// Splits vertices along edges shared by more than two faces; the new boundaries are cut as seams later.
+    private static func repairedNonManifold(_ mesh: ImportedMesh) -> ImportedMesh {
+        let positions = mesh.vertices.map { Vec3($0.x, $0.y, $0.z) }
+        let triangles = mesh.triangles.flatMap { [Int32($0.a), Int32($0.b), Int32($0.c)] }
+        let repaired = MeshRepair.resolveNonManifoldEdges(positions: positions, triangles: triangles)
+        guard repaired.nonManifoldEdges > 0 else { return mesh }
+        return ImportedMesh(
+            vertices: repaired.positions.map { MeshVertex(x: $0.x, y: $0.y, z: $0.z) },
+            triangles: stride(from: 0, to: repaired.triangles.count, by: 3).map {
+                MeshTriangle(a: Int(repaired.triangles[$0]), b: Int(repaired.triangles[$0 + 1]), c: Int(repaired.triangles[$0 + 2]))
+            }
+        )
     }
 }
 
