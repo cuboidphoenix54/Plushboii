@@ -515,6 +515,19 @@ struct ContentView: View {
                 .controlSize(.large)
                 .disabled(isImporting || selectedPattern == nil)
                 .help(selectedPattern == nil ? "Select a pattern first" : "Import a 3D model into this pattern")
+                .accessibilityIdentifier("importModelMenu")
+
+                Button {
+                    beginImport(.model)
+                } label: {
+                    Label("Import 3D File…", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                }
+                .controlSize(.large)
+                .keyboardShortcut("o", modifiers: .command)
+                .disabled(isImporting || selectedPattern == nil)
+                .help("Choose an STL, OBJ or USDZ file (⌘O)")
+                .accessibilityIdentifier("importModelFile")
 
                 HStack {
                     Button(action: createPattern) {
