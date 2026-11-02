@@ -425,10 +425,11 @@ public enum PlushAgent {
                     return FabricNesting.Shape(id: index, outline: outline, copies: max(piece.copies, 1))
                 }
                 do {
-                    let nested = try FabricNesting.nestShapes(shapes, fabricWidth: options.fabricWidthCentimeters)
+                    let (nested, turned) = try PlushSizing.nest(shapes, fabricWidth: options.fabricWidthCentimeters)
                     report.construction.append(String(
-                        format: "Fabric needed for a %.0f cm plush: about %.0f cm (%.2f yd) of %.0f cm wide fabric, %.0f%% covered (pieces interlock on a 1 cm grid, no rotation; add 10%% for pile direction and mistakes).",
-                        heightCentimeters, nested.usedLength, nested.usedLength / 91.44, nested.fabricWidth, nested.efficiency * 100))
+                        format: "Fabric needed for a %.0f cm plush: about %.0f cm (%.2f yd) of %.0f cm wide fabric, %.0f%% covered (pieces interlock on a 1 cm grid; add 10%% for pile direction and mistakes).%@",
+                        heightCentimeters, nested.usedLength, nested.usedLength / 91.44, nested.fabricWidth, nested.efficiency * 100,
+                        turned ? " Some pieces are turned 90° to fit the fabric width; check nap direction." : ""))
                 } catch {
                     report.warnings.append("Fabric estimate skipped: \(error.localizedDescription)")
                 }

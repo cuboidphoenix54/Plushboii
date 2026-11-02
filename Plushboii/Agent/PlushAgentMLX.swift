@@ -15,7 +15,7 @@ extension PlushAgent {
         options: PlushAgentOptions = PlushAgentOptions(),
         adapterPath: String?,
         advisorModel: String? = nil,
-        plushHeightCentimeters: Double = 50
+        plushHeightCentimeters: Double? = nil
     ) async throws -> PlushAgentMLXResult {
         guard let directory = options.outputDirectory else { throw PlushAgentError.unreadable("MLX runs need --out DIR.") }
         if let adapterPath { UserDefaults.standard.set(adapterPath, forKey: "mlxvlm.adapterPath") }
@@ -68,7 +68,7 @@ extension PlushAgent {
     /// Combines every piece's panels into one sheet at the requested plush height.
     private static func exportPattern(
         report inputReport: PlushAgentReport, summary: String, cuts cutLines: [String], prepared preparedPositions: [Vec3],
-        directory: URL, options: PlushAgentOptions, plushHeightCentimeters: Double
+        directory: URL, options: PlushAgentOptions, plushHeightCentimeters requestedHeight: Double?
     ) async throws -> PlushAgentMLXResult {
         var report = inputReport
         let fabric: FabricProfile
@@ -105,12 +105,22 @@ extension PlushAgent {
         var files: [String] = []
         if !islands.isEmpty {
             let height = (preparedPositions.map(\.y).max() ?? 1) - (preparedPositions.map(\.y).min() ?? 0)
-            let scale = plushHeightCentimeters / max(height, 1e-9)
             var layout = LayoutOptions()
             layout.names = names
             layout.seamAllowancePoints = options.seamAllowancePoints
             layout.includeSewingNotes = false
-            let sheet = try PatternLayout.makeSheet(from: FlatteningResult(islands: islands, fabric: fabric), centimetersPerUnit: scale, options: layout)
+            let flattened = FlatteningResult(islands: islands, fabric: fabric)
+            let provisional = requestedHeight ?? PlushSizing.automaticMaximumCentimeters
+            let probeSheet = try PatternLayout.makeSheet(from: flattened, centimetersPerUnit: provisional / max(height, 1e-9), options: layout)
+            let fitting = PlushSizing.fittingHeight(
+                currentHeight: provisional, widestPieceCentimeters: PlushSizing.widestPieceCentimeters(of: probeSheet),
+                fabricWidthCentimeters: options.fabricWidthCentimeters, seamAllowancePoints: options.seamAllowancePoints)
+            let plushHeightCentimeters = requestedHeight ?? PlushSizing.recommendedHeight(limit: min(fitting ?? provisional, provisional))
+            report.construction.append(PlushSizing.advice(chosen: plushHeightCentimeters, fitting: fitting, fabricWidthCentimeters: options.fabricWidthCentimeters))
+            let scale = plushHeightCentimeters / max(height, 1e-9)
+            let sheet = plushHeightCentimeters == provisional
+                ? probeSheet
+                : try PatternLayout.makeSheet(from: flattened, centimetersPerUnit: scale, options: layout)
             try Data(PatternSVGExporter.svg(sheet).utf8).write(to: directory.appendingPathComponent("pattern.svg"))
             try Data(PatternDXFExporter.dxf(sheet).utf8).write(to: directory.appendingPathComponent("pattern.dxf"))
             files = ["pattern.svg", "pattern.dxf"]
@@ -129,10 +139,11 @@ extension PlushAgent {
                 return FabricNesting.Shape(id: index, outline: outline, copies: max(piece.copies, 1))
             }
             do {
-                let nested = try FabricNesting.nestShapes(shapes, fabricWidth: options.fabricWidthCentimeters)
+                let (nested, turned) = try PlushSizing.nest(shapes, fabricWidth: options.fabricWidthCentimeters)
                 report.construction.append(String(
-                    format: "Fabric needed: about %.0f cm (%.2f yd) of %.0f cm wide fabric, %.0f%% covered (pieces interlock on a 1 cm grid, no rotation; add 10%% for pile direction and mistakes).",
-                    nested.usedLength, nested.usedLength / 91.44, nested.fabricWidth, nested.efficiency * 100))
+                    format: "Fabric needed: about %.0f cm (%.2f yd) of %.0f cm wide fabric, %.0f%% covered (pieces interlock on a 1 cm grid; add 10%% for pile direction and mistakes).%@",
+                    nested.usedLength, nested.usedLength / 91.44, nested.fabricWidth, nested.efficiency * 100,
+                        turned ? " Some pieces are turned 90° to fit the fabric width; check nap direction." : ""))
             } catch {
                 report.warnings.append("Fabric estimate skipped: \(error.localizedDescription)")
             }

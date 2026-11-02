@@ -22,7 +22,7 @@ var options = PlushAgentOptions()
 var wantsJSON = false
 var useMLX = false
 var adapterPath: String?
-var plushHeight = 50.0
+var plushHeight: Double?
 var inputPath: String?
 
 func fail(_ message: String) -> Never {
@@ -87,7 +87,7 @@ do {
         result.patternFiles.forEach { print("  pattern: \($0)") }
         report = result.report
     } else {
-        options.plushHeightCentimeters = plushHeight
+        options.plushHeightCentimeters = plushHeight ?? 50
         report = try PlushAgent.run(input: URL(fileURLWithPath: inputPath), options: options)
     }
     if wantsJSON {

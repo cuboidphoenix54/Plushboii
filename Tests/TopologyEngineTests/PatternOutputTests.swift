@@ -195,3 +195,32 @@ final class PatternOutputTests: XCTestCase {
     }
     #endif
 }
+
+extension PatternOutputTests {
+    func testFittingHeightScalesLinearlyAndAccountsForAllowance() {
+        let allowance = PatternUnits.seamAllowancePoints
+        let cm = 2 * allowance / PatternUnits.pointsPerCentimeter
+        let fit = PlushSizing.fittingHeight(currentHeight: 50, widestPieceCentimeters: 158, fabricWidthCentimeters: 112, seamAllowancePoints: allowance)
+        XCTAssertEqual(fit ?? 0, 50 * (112 - PlushSizing.fabricMargin - cm) / (158 - cm), accuracy: 1e-9)
+        XCTAssertNil(PlushSizing.fittingHeight(currentHeight: 50, widestPieceCentimeters: 0.1, fabricWidthCentimeters: 112, seamAllowancePoints: allowance))
+        XCTAssertNil(PlushSizing.fittingHeight(currentHeight: 0, widestPieceCentimeters: 100, fabricWidthCentimeters: 112, seamAllowancePoints: allowance))
+    }
+
+    func testRecommendedHeightSnapsDownToCommonSizes() {
+        XCTAssertEqual(PlushSizing.recommendedHeight(limit: 50), 50)
+        XCTAssertEqual(PlushSizing.recommendedHeight(limit: 45), 35)
+        XCTAssertEqual(PlushSizing.recommendedHeight(limit: 12.7), 12)
+        XCTAssertEqual(PlushSizing.recommendedHeight(limit: .nan), 15)
+    }
+
+    func testRecommendedSizeProducesPiecesThatFitTheFabric() throws {
+        let result = FlatteningResult(islands: [island(width: 1.57, height: 0.5)], fabric: .none)
+        let allowance = PatternUnits.seamAllowancePoints
+        var options = LayoutOptions(); options.seamAllowancePoints = allowance
+        let probe = try PatternLayout.makeSheet(from: result, centimetersPerUnit: 100, options: options)
+        let widest = PlushSizing.widestPieceCentimeters(of: probe)
+        let fit = try XCTUnwrap(PlushSizing.fittingHeight(currentHeight: 100, widestPieceCentimeters: widest, fabricWidthCentimeters: 30, seamAllowancePoints: allowance))
+        let resized = try PatternLayout.makeSheet(from: result, centimetersPerUnit: fit, options: options)
+        XCTAssertEqual(PlushSizing.widestPieceCentimeters(of: resized), 30 - PlushSizing.fabricMargin, accuracy: 0.2)
+    }
+}

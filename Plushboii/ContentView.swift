@@ -49,7 +49,9 @@ private enum AIPipelineRunner {
         subject: SubjectOverride,
         model: String,
         fabric: FabricChoice,
-        seamAllowancePoints: Double
+        seamAllowancePoints: Double,
+        plushHeightCentimeters: Double?,
+        fabricWidthCentimeters: Double?
     ) async throws -> AIPipelineReview {
         guard let supportDirectory = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
@@ -75,6 +77,7 @@ private enum AIPipelineRunner {
         options.outputDirectory = outputDirectory
         options.subject = subject
         options.seamAllowancePoints = seamAllowancePoints
+        if let fabricWidthCentimeters { options.fabricWidthCentimeters = fabricWidthCentimeters }
         if let properties = fabric.properties {
             if let darts = properties.maximumDarts {
                 options.rigidMaximumDarts = darts
@@ -88,7 +91,8 @@ private enum AIPipelineRunner {
             input: inputURL,
             options: options,
             adapterPath: nil,
-            advisorModel: model
+            advisorModel: model,
+            plushHeightCentimeters: plushHeightCentimeters
         )
         var components: [MeshComponent] = []
         var seamPaths: [Int: [[Int]]] = [:]
@@ -876,6 +880,8 @@ struct ContentView: View {
         let model = mlxModel
         let fabric = fabricChoice
         let allowance = seamAllowance.points
+        let requestedHeight = Double(plushHeightCentimeters.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        let fabricWidth = Double(fabricWidthCm.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
         isAnalyzingAnatomy = true
         aiPipelineSummary = nil
         importStatus = "Preparing the mesh and running the local AI pattern pipeline…"
@@ -890,7 +896,9 @@ struct ContentView: View {
                         subject: subject,
                         model: model,
                         fabric: fabric,
-                        seamAllowancePoints: allowance
+                        seamAllowancePoints: allowance,
+                        plushHeightCentimeters: requestedHeight,
+                        fabricWidthCentimeters: fabricWidth
                     )
                 }.value
                 guard selectedPieceID == pieceID, seamEditor.mesh?.id == meshID else { return }
@@ -1047,7 +1055,18 @@ struct ContentView: View {
             TextField("plush height (cm)", text: $plushHeightCentimeters)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 130)
-                .help("Finished height of the plush. Sets the scale from the model's height when cm per mesh unit is empty.")
+                .help("Finished height of the plush. Sets the scale from the model's height when cm per mesh unit is empty. Leave empty for an automatic size in the AI pipeline.")
+            Menu("Sizes") {
+                ForEach(PlushSizing.presets, id: \.centimeters) { preset in
+                    Button("\(preset.name) · \(Int(preset.centimeters)) cm") {
+                        plushHeightCentimeters = String(Int(preset.centimeters))
+                    }
+                }
+                Divider()
+                Button("Automatic") { plushHeightCentimeters = "" }
+            }
+            .accessibilityIdentifier("plushSizeMenu")
+            .help("Common plush heights. Choose Automatic to let the AI pipeline fit the pattern to your fabric width.")
             TextField("cm per mesh unit", text: $centimetersPerMeshUnit)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 150)

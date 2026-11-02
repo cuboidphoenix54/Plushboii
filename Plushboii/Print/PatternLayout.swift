@@ -396,3 +396,80 @@ struct TilePlan: Sendable, Equatable {
         self.tiles = tiles
     }
 }
+
+/// Chooses a finished plush height per object. Pattern pieces scale linearly with height, so the tallest plush whose
+/// pieces still fit the fabric width follows directly from one layout at any provisional height.
+enum PlushSizing {
+    struct Preset: Sendable, Equatable {
+        let name: String
+        let centimeters: Double
+    }
+
+    /// Commonly sold plush heights; typical categories, not a formal standard.
+    static let presets: [Preset] = [
+        Preset(name: "Mini", centimeters: 15), Preset(name: "Small", centimeters: 25), Preset(name: "Medium", centimeters: 35),
+        Preset(name: "Standard", centimeters: 50), Preset(name: "Large", centimeters: 70), Preset(name: "Jumbo", centimeters: 90)
+    ]
+    /// Fabric width kept free for selvedges and the nesting gap, in cm.
+    static let fabricMargin = 4.0
+    /// Automatic sizing never goes above this; larger plushies are chosen explicitly.
+    static let automaticMaximumCentimeters = 50.0
+
+    /// Width in cm of the narrowest side of the widest piece's cut line (pieces may be turned on the fabric).
+    static func widestPieceCentimeters(of sheet: PatternSheet) -> Double {
+        sheet.pieces.map { piece -> Double in
+            let points = piece.cutLine.sampled(perSegment: 8)
+            guard let first = points.first else { return 0 }
+            var box = Rect2(minX: first.x, minY: first.y, maxX: first.x, maxY: first.y)
+            for point in points { box = box.union(Rect2(minX: point.x, minY: point.y, maxX: point.x, maxY: point.y)) }
+            return min(box.width, box.height) / PatternUnits.pointsPerCentimeter
+        }.max() ?? 0
+    }
+
+    /// Tallest plush, in cm, whose widest piece still fits the fabric. Nil when the allowance alone exceeds the fabric
+    /// or there is nothing to measure.
+    static func fittingHeight(
+        currentHeight: Double, widestPieceCentimeters: Double, fabricWidthCentimeters: Double, seamAllowancePoints: Double
+    ) -> Double? {
+        let allowance = 2 * seamAllowancePoints / PatternUnits.pointsPerCentimeter
+        let pattern = widestPieceCentimeters - allowance, room = fabricWidthCentimeters - fabricMargin - allowance
+        guard currentHeight.isFinite, currentHeight > 0, pattern > 1e-9, room > 0 else { return nil }
+        return currentHeight * room / pattern
+    }
+
+    /// Largest preset not above `limit`; below the smallest preset it falls back to whole centimeters.
+    static func recommendedHeight(limit: Double) -> Double {
+        guard limit.isFinite, limit > 0 else { return presets[0].centimeters }
+        return presets.last(where: { $0.centimeters <= limit + 1e-9 })?.centimeters ?? max(1, limit.rounded(.down))
+    }
+
+    static func name(for centimeters: Double) -> String? {
+        presets.first(where: { abs($0.centimeters - centimeters) < 1e-6 })?.name
+    }
+
+    /// One-line summary listing which common heights fit the fabric for this object.
+    static func advice(chosen: Double, fitting: Double?, fabricWidthCentimeters: Double) -> String {
+        let label = name(for: chosen).map { "\($0) " } ?? ""
+        guard let fitting else { return String(format: "Size: %@%.0f cm.", label, chosen) }
+        let fits = presets.filter { $0.centimeters <= fitting + 1e-9 }.map { "\($0.name) \(Int($0.centimeters)) cm" }
+        let list = fits.isEmpty ? "none of the common sizes" : fits.joined(separator: ", ")
+        return String(
+            format: "Size: %@%.0f cm. Widest piece fits %.0f cm fabric up to %.0f cm tall; common sizes that fit: %@. Set a height to override.",
+            label, chosen, fabricWidthCentimeters, fitting, list)
+    }
+}
+
+extension PlushSizing {
+    /// Nests with the pattern's own orientation; pieces wider than the fabric are turned 90° when that makes them fit.
+    static func nest(_ shapes: [FabricNesting.Shape], fabricWidth: Double) throws -> (layout: FabricNesting.ShapeLayout, turned: Bool) {
+        var turned = false
+        let prepared = shapes.map { shape -> FabricNesting.Shape in
+            let xs = shape.outline.map(\.x), ys = shape.outline.map(\.y)
+            guard let width = xs.max().map({ $0 - xs.min()! }), let height = ys.max().map({ $0 - ys.min()! }),
+                  width > fabricWidth - fabricMargin, height < width else { return shape }
+            turned = true
+            return FabricNesting.Shape(id: shape.id, outline: shape.outline.map { Vec2(-$0.y, $0.x) }, copies: shape.copies)
+        }
+        return (try FabricNesting.nestShapes(prepared, fabricWidth: fabricWidth), turned)
+    }
+}
