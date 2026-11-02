@@ -27,7 +27,9 @@ enum PrimitiveSplitter {
 
     /// One panel per flat face; opposite and equal faces are mirrored copies, which keeps the pattern uniform.
     static func facetComponents(positions: [Vec3], triangles: [Int32]) -> [MeshComponent] {
-        let set = PrimitiveDetector.clusterFacets(positions: positions, triangles: triangles)
+        var set = PrimitiveDetector.clusterFacets(positions: positions, triangles: triangles)
+        if set.coverage < PrimitiveDetector.polyhedronCoverage,
+           let rounded = PrimitiveDetector.roundedBoxFacets(positions: positions, triangles: triangles) { set = rounded }
         let parts = set.facets.enumerated().compactMap { index, facet in
             subset(positions: positions, triangles: triangles, faces: facet.faces, label: "Face \(index + 1)")
         }

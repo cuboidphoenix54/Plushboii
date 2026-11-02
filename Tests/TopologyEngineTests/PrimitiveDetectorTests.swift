@@ -77,6 +77,35 @@ final class PrimitiveDetectorTests: XCTestCase {
         return (p, t)
     }
 
+    func testRoundedBoxHasNoFlatFacesButStillBecomesSixFaces() throws {
+        // A superellipsoid |x|^6+|y|^6+|z|^6 = 1 has no truly flat region.
+        let rings = 24, segments = 48
+        var p: [Vec3] = [], t: [Int32] = []
+        func radius(_ d: Vec3) -> Double { 1 / pow(pow(abs(d.x), 6) + pow(abs(d.y), 6) + pow(abs(d.z), 6), 1.0 / 6) }
+        p.append(Vec3(0, 0, -radius(Vec3(0, 0, -1))))
+        for r in 1..<rings {
+            let a = Double.pi * Double(r) / Double(rings)
+            for s in 0..<segments {
+                let b = 2 * Double.pi * Double(s) / Double(segments)
+                let d = Vec3(sin(a) * cos(b), sin(a) * sin(b), -cos(a))
+                p.append(d * radius(d))
+            }
+        }
+        p.append(Vec3(0, 0, radius(Vec3(0, 0, 1))))
+        func v(_ r: Int, _ s: Int) -> Int32 { Int32(1 + (r - 1) * segments + (s % segments)) }
+        for s in 0..<segments { t += [0, v(1, s + 1), v(1, s)] }
+        for r in 1..<(rings - 1) { for s in 0..<segments { t += [v(r, s), v(r, s + 1), v(r + 1, s + 1), v(r, s), v(r + 1, s + 1), v(r + 1, s)] } }
+        let top = Int32(p.count - 1)
+        for s in 0..<segments { t += [top, v(rings - 1, s), v(rings - 1, s + 1)] }
+        let fit = try XCTUnwrap(PrimitiveDetector.detect(positions: p, triangles: t))
+        XCTAssertEqual(fit.kind, .box)
+        XCTAssertEqual(PrimitiveSplitter.facetComponents(positions: p, triangles: t).count, 6)
+    }
+
+    func testSphereIsNotMistakenForARoundedBox() {
+        XCTAssertNotEqual(PrimitiveDetector.detect(positions: sphere().positions, triangles: sphere().triangles)?.kind, .box)
+    }
+
     func testSphereIsRecognisedAndGoredPoleToPole() throws {
         let m = sphere()
         let fit = try XCTUnwrap(PrimitiveDetector.detect(positions: m.positions, triangles: m.triangles))

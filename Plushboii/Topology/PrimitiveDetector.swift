@@ -1,4 +1,5 @@
 import Foundation
+import simd
 
 /// A recognised geometric primitive and the plush construction it implies.
 struct PrimitiveFit: Codable, Equatable, Sendable {
@@ -52,7 +53,67 @@ enum PrimitiveDetector {
               triangles.allSatisfy({ $0 >= 0 && Int($0) < positions.count }) else { return nil }
         let set = clusterFacets(positions: positions, triangles: triangles)
         if let solid = polyhedronFit(positions: positions, triangles: triangles, set: set) { return solid }
-        return revolveFit(positions: positions, set: set)
+        if let solid = revolveFit(positions: positions, set: set) { return solid }
+        if let rounded = roundedBoxFacets(positions: positions, triangles: triangles) {
+            return PrimitiveFit(kind: .box, confidence: rounded.coverage, axis: nil, center: positions.reduce(Vec3.zero, +) / Double(positions.count), baseAtHigh: false, faceCount: 6, summary: "Rounded box: 6 broad, gently curved faces in 3 opposite pairs.")
+        }
+        return nil
+    }
+
+    /// Share of the surface that must lean squarely toward one of six box directions for a rounded box.
+    static let roundedBoxCoverage = 0.5
+
+    /// Rounded boxes have no truly flat faces, so faces are binned by which of six frame directions their normal favours.
+    /// Tries the world axes and the principal axes and keeps the frame that fits best.
+    static func roundedBoxFacets(positions: [Vec3], triangles: [Int32]) -> FacetSet? {
+        guard !positions.isEmpty, triangles.count >= 12 else { return nil }
+        let mean = positions.reduce(Vec3.zero, +) / Double(positions.count)
+        let world = [Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)]
+        var best: FacetSet?
+        for frame in [world, principalAxes(of: positions, mean: mean)] where frame.count == 3 {
+            var low = Vec3(repeating: .infinity), high = Vec3(repeating: -.infinity)
+            for p in positions {
+                let q = Vec3(vdot(p, frame[0]), vdot(p, frame[1]), vdot(p, frame[2]))
+                low = simd_min(low, q); high = simd_max(high, q)
+            }
+            let centre = (low + high) / 2, half = (high - low) / 2
+            guard half.x > 1e-9, half.y > 1e-9, half.z > 1e-9 else { continue }
+            let count = triangles.count / 3
+            var labels = [Int](repeating: -1, count: count)
+            var members = [[Int]](repeating: [], count: 6)
+            var areas = [Double](repeating: 0, count: 6)
+            var normals = [Vec3](repeating: .zero, count: 6)
+            var centroids = [Vec3](repeating: .zero, count: 6)
+            var total = 0.0, aligned = 0.0
+            for f in 0..<count {
+                let a = positions[Int(triangles[3 * f])], b = positions[Int(triangles[3 * f + 1])], c = positions[Int(triangles[3 * f + 2])]
+                let cross = vcross(b - a, c - a)
+                let length = vlength(cross)
+                guard length > 1e-18 else { continue }
+                let area = 0.5 * length
+                let n = cross / length
+                let local = Vec3(vdot(n, frame[0]), vdot(n, frame[1]), vdot(n, frame[2]))
+                let middle = (a + b + c) / 3
+                let m = Vec3(vdot(middle, frame[0]), vdot(middle, frame[1]), vdot(middle, frame[2]))
+                let axisIndex = abs(local.x) >= abs(local.y) && abs(local.x) >= abs(local.z) ? 0 : (abs(local.y) >= abs(local.z) ? 1 : 2)
+                let side = local[axisIndex] >= 0 ? 0 : 1
+                let label = axisIndex * 2 + side
+                labels[f] = label; members[label].append(f)
+                areas[label] += area; normals[label] += n * area; centroids[label] += middle * area
+                total += area
+                let reach = abs(m[axisIndex] - centre[axisIndex]) / half[axisIndex]
+                if abs(local[axisIndex]) >= 0.9, reach >= 0.85 { aligned += area }
+            }
+            guard total > 0, areas.allSatisfy({ $0 >= 0.05 * total }) else { continue }
+            let coverage = aligned / total
+            guard coverage >= roundedBoxCoverage, coverage > (best?.coverage ?? 0) else { continue }
+            let facets = (0..<6).map { id -> Facet in
+                let n = normals[id] / areas[id]
+                return Facet(faces: members[id], normal: n / max(vlength(n), 1e-12), area: areas[id], centroid: centroids[id] / areas[id])
+            }
+            best = FacetSet(labels: labels, facets: facets, coverage: coverage)
+        }
+        return best
     }
 
     // MARK: Planar facets
