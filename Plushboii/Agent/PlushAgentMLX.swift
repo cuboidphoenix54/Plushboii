@@ -110,7 +110,15 @@ extension PlushAgent {
             layout.names = names
             layout.seamAllowancePoints = options.seamAllowancePoints
             layout.includeSewingNotes = false
-            let sheet = try PatternLayout.makeSheet(from: FlatteningResult(islands: islands, fabric: fabric), centimetersPerUnit: scale, options: layout)
+            let sheet: PatternSheet
+            do {
+                sheet = try PatternLayout.makeSheet(from: FlatteningResult(islands: islands, fabric: fabric), centimetersPerUnit: scale, options: layout)
+            } catch PatternOutputError.doesNotFitA0 {
+                report.warnings.append(String(
+                    format: "Pattern export skipped: at %.0f cm tall the pieces do not fit on one A0 sheet. Cut the largest piece into smaller sections or lower the plush height, then export again.",
+                    plushHeightCentimeters))
+                return PlushAgentMLXResult(report: report, summary: summary, cuts: cutLines, patternFiles: [])
+            }
             try Data(PatternSVGExporter.svg(sheet).utf8).write(to: directory.appendingPathComponent("pattern.svg"))
             try Data(PatternDXFExporter.dxf(sheet).utf8).write(to: directory.appendingPathComponent("pattern.dxf"))
             try await PatternPDFExporter.a0PDF(sheet).write(to: directory.appendingPathComponent("pattern_a0.pdf"))
