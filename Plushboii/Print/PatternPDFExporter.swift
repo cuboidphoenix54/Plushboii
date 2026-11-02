@@ -5,7 +5,7 @@ import PDFKit
 
 struct PatternOutputs: Sendable {
     let sheet: PatternSheet
-    /// One continuous A0 page of vector paths for large-format plotters.
+    /// One continuous A0 page of vector paths for large-format plotters; empty when the pattern is too big for A0.
     let a0PDF: Data
     /// US Letter tiles with crop marks and sequential page numbers.
     let tiledPDF: Data
@@ -17,15 +17,15 @@ enum PatternPrintPipeline {
     /// Nothing is produced if any island has no valid outline or either PDF fails validation.
     static func export(result: FlatteningResult, centimetersPerUnit: Double, options: LayoutOptions = LayoutOptions()) async throws -> PatternOutputs {
         let sheet = try PatternLayout.makeSheet(from: result, centimetersPerUnit: centimetersPerUnit, options: options)
-        async let a0 = PatternPDFExporter.a0PDF(sheet)
-        async let tiled = PatternPDFExporter.tiledPDF(sheet)
-        let (a0Data, tiledResult) = try await (a0, tiled)
+        let tiledResult = try await PatternPDFExporter.tiledPDF(sheet)
+        let a0Data = sheet.isOversized ? Data() : try await PatternPDFExporter.a0PDF(sheet)
         return PatternOutputs(sheet: sheet, a0PDF: a0Data, tiledPDF: tiledResult.data, tiledPageCount: tiledResult.pages)
     }
 }
 
 enum PatternPDFExporter {
     static func a0PDF(_ sheet: PatternSheet) async throws -> Data {
+        if sheet.isOversized { throw PatternOutputError.doesNotFitA0 }
         let size = CGSize(width: sheet.pageSize.x, height: sheet.pageSize.y)
         let data = try makePDF(pageSize: size, title: "Plushboii pattern (A0)", pages: 1) { ctx, _ in
             PatternRenderer.drawSheetContent(sheet, in: ctx)

@@ -138,10 +138,28 @@ final class PatternOutputTests: XCTestCase {
         let result = FlatteningResult(islands: [island(width: 10, height: 6)], fabric: .none)
         XCTAssertThrowsError(try PatternLayout.makeSheet(from: result, centimetersPerUnit: 0))
         XCTAssertThrowsError(try PatternLayout.makeSheet(from: result, centimetersPerUnit: .nan))
-        XCTAssertThrowsError(try PatternLayout.makeSheet(from: result, centimetersPerUnit: 500)) { error in
+        let huge = try? PatternLayout.makeSheet(from: result, centimetersPerUnit: 500)
+        XCTAssertEqual(huge?.isOversized, true)
+        XCTAssertThrowsError(try PatternLayout.makeSheet(from: FlatteningResult(islands: [], fabric: .none), centimetersPerUnit: 1))
+    }
+
+    func testOversizedPatternSpansManyLetterPagesAndKeepsScale() async throws {
+        let result = FlatteningResult(islands: [island(width: 10, height: 6)], fabric: .none)
+        let sheet = try PatternLayout.makeSheet(from: result, centimetersPerUnit: 500)
+        XCTAssertTrue(sheet.isOversized)
+        let expected = 10 * 500 * PatternUnits.pointsPerCentimeter
+        let box = sheet.pieces[0].cutLine.bounds
+        XCTAssertEqual(box.width, expected + 2 * PatternUnits.seamAllowancePoints, accuracy: 2)
+        XCTAssertEqual(sheet.calibration.width, PatternUnits.calibrationSidePoints, accuracy: 1e-9)
+        let tiled = try await PatternPDFExporter.tiledPDF(sheet)
+        XCTAssertGreaterThan(tiled.pages, 10)
+        XCTAssertEqual(PDFDocument(data: tiled.data)?.pageCount, tiled.pages)
+        do {
+            _ = try await PatternPDFExporter.a0PDF(sheet)
+            XCTFail("an oversized sheet must not be written as a single A0 page")
+        } catch {
             XCTAssertEqual(error as? PatternOutputError, .doesNotFitA0)
         }
-        XCTAssertThrowsError(try PatternLayout.makeSheet(from: FlatteningResult(islands: [], fabric: .none), centimetersPerUnit: 1))
     }
 
     func testTilePlanNumbersPagesSequentiallyAndSkipsBlankTiles() throws {

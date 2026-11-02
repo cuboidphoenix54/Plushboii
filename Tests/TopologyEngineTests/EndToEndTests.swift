@@ -172,11 +172,11 @@ final class EndToEndTests: XCTestCase {
         for w in widths { XCTAssertEqual(w, expected, accuracy: 1.5) }
     }
 
-    func testImpossiblePatternThrowsDoesNotFit() {
+    func testPatternBiggerThanA0IsLaidOutForTiling() throws {
         let result = FlatteningResult(islands: [rectIsland(width: 400, height: 400, segment: 0)], fabric: fabric())
-        XCTAssertThrowsError(try PatternLayout.makeSheet(from: result, centimetersPerUnit: 1)) {
-            XCTAssertEqual($0 as? PatternOutputError, .doesNotFitA0)
-        }
+        let sheet = try PatternLayout.makeSheet(from: result, centimetersPerUnit: 1)
+        XCTAssertTrue(sheet.isOversized)
+        XCTAssertGreaterThan(sheet.pageSize.x, PaperSize.a0.x)
     }
 
     func testCalibrationSquareStaysFiveCentimetresAtEveryScale() throws {

@@ -106,6 +106,8 @@ struct PatternSheet: Sendable {
     let calibration: Rect2
     /// Extent of everything that is drawn; the tiled output only covers this area.
     let contentBounds: Rect2
+    /// True when the pieces are too big for any A0 page, so the sheet is only meant for the multi-page US Letter output.
+    var isOversized = false
 }
 
 enum PatternLayout {
@@ -185,8 +187,11 @@ enum PatternLayout {
 
         // A0 first; larger patterns fall back to an A0-wide roll of two or three A0 lengths, never scaled down.
         let a0 = PaperSize.a0
-        for page in [a0, Vec2(a0.y, a0.x), Vec2(a0.x, a0.y * 2), Vec2(a0.x, a0.y * 3)] {
+        let widest = prepared.map { $0.cut.bounds.width }.max() ?? 0
+        let oversizedPage = Vec2(max(a0.x, widest + 2 * margin), .greatestFiniteMagnitude)
+        for page in [a0, Vec2(a0.y, a0.x), Vec2(a0.x, a0.y * 2), Vec2(a0.x, a0.y * 3), oversizedPage] {
             if let placed = pack(prepared.map { $0.cut.bounds }, order: order, page: page) {
+                let oversized = page == oversizedPage
                 let pieces = prepared.indices.map { index -> PlacedPiece in
                     let origin = placed.origins[index]
                     let bounds = prepared[index].cut.bounds
@@ -245,7 +250,12 @@ enum PatternLayout {
                 let calibration = Rect2(minX: margin, minY: margin, maxX: margin + PatternUnits.calibrationSidePoints, maxY: margin + PatternUnits.calibrationSidePoints)
                 let content = pieces.reduce(calibration) { $0.union($1.cutLine.bounds) }
                 let bounds = Rect2(minX: 0, minY: 0, maxX: content.maxX + margin, maxY: content.maxY + margin)
-                return PatternSheet(pageSize: page, pieces: pieces, calibration: calibration, contentBounds: bounds)
+                var sheet = PatternSheet(
+                    pageSize: oversized ? Vec2(page.x, bounds.maxY) : page,
+                    pieces: pieces, calibration: calibration, contentBounds: bounds
+                )
+                sheet.isOversized = oversized
+                return sheet
             }
         }
         throw PatternOutputError.doesNotFitA0

@@ -108,7 +108,7 @@ enum PatternOutputError: LocalizedError, Equatable {
         case .offsetDegenerate(let segment):
             "The seam allowance for island \(segment + 1) would fold over itself (a concave curve tighter than the allowance). No outline was produced."
         case .doesNotFitA0:
-            "The pattern pieces do not fit on one A0 sheet at this scale."
+            "The pattern pieces do not fit on one A0 sheet at this scale. Export the US Letter tiles instead; they span as many pages as needed."
         case .pdfCreationFailed:
             "The PDF could not be created."
         case .pdfValidationFailed(let reason):

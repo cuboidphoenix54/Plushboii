@@ -110,19 +110,19 @@ extension PlushAgent {
             layout.names = names
             layout.seamAllowancePoints = options.seamAllowancePoints
             layout.includeSewingNotes = false
-            let sheet: PatternSheet
-            do {
-                sheet = try PatternLayout.makeSheet(from: FlatteningResult(islands: islands, fabric: fabric), centimetersPerUnit: scale, options: layout)
-            } catch PatternOutputError.doesNotFitA0 {
-                report.warnings.append(String(
-                    format: "Pattern export skipped: at %.0f cm tall the pieces do not fit on one A0 sheet. Cut the largest piece into smaller sections or lower the plush height, then export again.",
-                    plushHeightCentimeters))
-                return PlushAgentMLXResult(report: report, summary: summary, cuts: cutLines, patternFiles: [])
-            }
+            let sheet = try PatternLayout.makeSheet(from: FlatteningResult(islands: islands, fabric: fabric), centimetersPerUnit: scale, options: layout)
             try Data(PatternSVGExporter.svg(sheet).utf8).write(to: directory.appendingPathComponent("pattern.svg"))
             try Data(PatternDXFExporter.dxf(sheet).utf8).write(to: directory.appendingPathComponent("pattern.dxf"))
-            try await PatternPDFExporter.a0PDF(sheet).write(to: directory.appendingPathComponent("pattern_a0.pdf"))
-            files = ["pattern.svg", "pattern.dxf", "pattern_a0.pdf"]
+            files = ["pattern.svg", "pattern.dxf"]
+            if sheet.isOversized {
+                let tiled = try await PatternPDFExporter.tiledPDF(sheet)
+                try tiled.data.write(to: directory.appendingPathComponent("pattern_letter_tiles.pdf"))
+                files.append("pattern_letter_tiles.pdf")
+                report.construction.append("Pattern is larger than one A0 sheet, so it is printed across \(tiled.pages) US Letter pages (pattern_letter_tiles.pdf); tape the pages together using the crop marks.")
+            } else {
+                try await PatternPDFExporter.a0PDF(sheet).write(to: directory.appendingPathComponent("pattern_a0.pdf"))
+                files.append("pattern_a0.pdf")
+            }
             let pointsPerCentimeter = PatternUnits.pointsPerCentimeter
             let shapes = sheet.pieces.enumerated().map { index, piece -> FabricNesting.Shape in
                 let outline = piece.cutLine.sampled(perSegment: 8).map { Vec2($0.x / pointsPerCentimeter, $0.y / pointsPerCentimeter) }
