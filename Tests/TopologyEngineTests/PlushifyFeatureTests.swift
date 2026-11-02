@@ -22,12 +22,16 @@ final class PlushifyFeatureTests: XCTestCase {
         let q = PatternQualityMap.evaluate(island: island, positions: pos)
         XCTAssertLessThan(q.worstStretch, 1e-6)
         XCTAssertEqual(q.flippedTriangles, 0)
+        XCTAssertEqual(q.saturatedArea, 0, accuracy: 1e-9)
+        XCTAssertEqual(q.totalArea, 2, accuracy: 1e-9)
     }
 
     func testAnisotropicPatchStretches() {
         var (island, pos) = gridIsland(width: 2, height: 1)
         island = UVIsland(segmentIndex: 0, triangles: island.triangles, uv: island.uv.map { Vec2($0.x * 2, $0.y) }, sourceVertex: island.sourceVertex, darts: [], geometryReport: island.geometryReport, report: island.report, log: [])
         XCTAssertGreaterThan(PatternQualityMap.evaluate(island: island, positions: pos).worstStretch, 0.4)
+        let q = PatternQualityMap.evaluate(island: island, positions: pos)
+        XCTAssertEqual(q.saturatedArea, q.totalArea, accuracy: 1e-9)
     }
 
     func testMirroredTriangleIsFlipped() {

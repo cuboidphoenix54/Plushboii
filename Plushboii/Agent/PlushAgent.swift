@@ -10,12 +10,25 @@ public struct PlushAgentOptions: Sendable {
     /// Percent stretch relied on along warp/weft. Both nil means geometry-only (no fabric adjustment).
     public var warpStretchPercent: Double?
     public var weftStretchPercent: Double?
+    /// Maximum dart count used when solving rigid-fabric pieces. Nil keeps the geometry-only profile.
+    public var rigidMaximumDarts: Int?
+    /// Seam allowance for pattern files, in points (1/72 inch).
+    public var seamAllowancePoints: Double = 18
     /// Skip seam solving on pieces above this many faces to keep runs bounded.
     public var maximumFacesForSeamSolve: Int = 30_000
     /// When set, the prepared mesh and every cut piece are written here as OBJ files.
     public var outputDirectory: URL?
     /// Taubin smoothing passes applied before orientation and cutting; 0 disables smoothing.
     public var smoothingIterations: Int = MeshSmoothing.defaultIterations
+
+    /// Axis-aligned anatomical cuts (from the MLX model) used instead of joint proposals when set.
+    var anatomyCuts: [AnatomicalCut]?
+
+    /// Forces creature or object handling; `.auto` classifies from the geometry.
+    public var subject: SubjectOverride = .auto
+
+    /// Sections an object is divided into along its longest axis; nil lets the agent choose and escalate.
+    var objectSlabs: Int?
 
     public init() {}
 }
@@ -57,6 +70,10 @@ public struct PlushAgentReport: Codable, Sendable {
     public var mirrorAxis: String?
     public var mirrorMatch: Double?
     public var joints: [PlushAgentJoint] = []
+    public var subjectKind = "creature"
+    public var subjectScore = 0.0
+    public var subjectReasons: [String] = []
+    public var objectSlabs = 1
     public var pieces: [PlushAgentPiece] = []
     public var preparedMeshFile: String?
     public var steps: [String] = []
@@ -82,6 +99,21 @@ public enum PlushAgentError: LocalizedError {
 
 public enum PlushAgent {
     public static func run(input url: URL, options: PlushAgentOptions = PlushAgentOptions()) throws -> PlushAgentReport {
+        var best = try runPass(input: url, options: options)
+        guard best.subjectKind == SubjectKind.object.rawValue, options.objectSlabs == nil,
+              !best.steps.contains(where: { $0.hasPrefix("Tapered") || $0.hasPrefix("Flat object") }) else { return best }
+        // A single object surface rarely flattens within tolerance; divide it into more sections until every piece verifies.
+        for slabs in [3, 4, 6, 8, 12] where slabs > best.objectSlabs && best.verdict != "ready" {
+            var retry = options
+            retry.objectSlabs = slabs
+            let report = try runPass(input: url, options: retry)
+            let failed = { (r: PlushAgentReport) in r.pieces.filter { $0.issue != nil }.count }
+            if failed(report) <= failed(best) { best = report }
+        }
+        return best
+    }
+
+    private static func runPass(input url: URL, options: PlushAgentOptions) throws -> PlushAgentReport {
         var report = PlushAgentReport(input: url.lastPathComponent)
 
         // 1. Probe: load and validate.
@@ -157,8 +189,53 @@ public enum PlushAgent {
         report.joints = joints.map {
             PlushAgentJoint(name: $0.name, position: [$0.position.x, $0.position.y, $0.position.z], direction: [$0.direction.x, $0.direction.y, $0.direction.z], positiveLabel: $0.positiveLabel, negativeLabel: $0.negativeLabel)
         }
+        let subject = SubjectClassifier.classify(
+            positions: positions, triangles: triangles, joints: joints, mirrorMatch: report.mirrorMatch, override: options.subject
+        )
+        report.subjectKind = subject.kind.rawValue
+        report.subjectScore = subject.creatureScore
+        report.subjectReasons = subject.reasons
+        report.steps.append("Subject: \(subject.kind.rawValue) (creature score \(String(format: "%.2f", subject.creatureScore))).")
         var components: [MeshComponent]
-        if joints.isEmpty {
+        if subject.kind == .object {
+            // Objects need far less detail than a character; coarser meshes flatten and solve much faster.
+            let objectFaces = min(options.targetFaces, 5_000)
+            if triangles.count / 3 > objectFaces {
+                let coarse = MeshSimplifier.simplify(positions: positions, triangles: triangles, targetFaces: objectFaces)
+                positions = coarse.positions; triangles = coarse.triangles
+                report.steps.append("Object simplified further to \(triangles.count / 3) faces.")
+            }
+            let whole = MeshComponent(id: 0, positions: positions, triangles: triangles, sourceVertices: Array(positions.indices), anatomicalLabel: "body")
+            let slabs = subject.strategy == .frontBack || subject.strategy == .gores ? 2 : (options.objectSlabs ?? (HandleSeams.genus(triangles: triangles) > 0 ? 3 : 1))
+            report.objectSlabs = slabs
+            do {
+                if subject.strategy == .gores, let axis = subject.taperAxis {
+                    components = try SubjectClassifier.goreComponents(positions: positions, triangles: triangles, axis: axis, baseAtHigh: subject.baseAtHigh)
+                    report.objectSlabs = 1
+                    report.steps.append("Tapered object: circular base plus \(components.count - 1) leaves meeting at the apex; sew the leaves together, then set in the base.")
+                } else if let cuts = SubjectClassifier.objectCuts(for: subject) {
+                    components = try AnatomicalMeshSplitter.split(positions: positions, triangles: triangles, cuts: cuts)
+                    report.steps.append("Flat object: split into front/back shells; sew them together around the rim.")
+                } else if slabs > 1 {
+                    components = try SubjectClassifier.slabComponents(positions: positions, triangles: triangles, count: slabs)
+                    report.steps.append("Object: divided into \(components.count) sections along its longest axis; sew them end to end.")
+                } else {
+                    components = [whole]
+                    report.steps.append("Object: no cuts; keeping one piece and letting the seam solver place seams.")
+                }
+            } catch {
+                report.warnings.append("Object split failed: \(error.localizedDescription). Using a single piece.")
+                components = [whole]
+            }
+        } else if let cuts = options.anatomyCuts {
+            do {
+                components = try StagedAnatomySplit.split(positions: positions, triangles: triangles, cuts: cuts)
+                report.steps.append("Cut into \(components.count) piece(s) along \(cuts.count) MLX-proposed plane(s).")
+            } catch {
+                report.warnings.append("Cutting at MLX planes failed: \(error.localizedDescription). Falling back to a single piece.")
+                components = [MeshComponent(id: 0, positions: positions, triangles: triangles, sourceVertices: Array(positions.indices), anatomicalLabel: "body")]
+            }
+        } else if joints.isEmpty {
             report.steps.append("No joints found; treating the mesh as a single piece.")
             report.warnings.append("The proposer found no narrow cross-sections. Place joints manually if the model has limbs or a head.")
             components = [MeshComponent(id: 0, positions: positions, triangles: triangles, sourceVertices: Array(positions.indices), anatomicalLabel: "body")]
@@ -175,7 +252,9 @@ public enum PlushAgent {
 
         // 6. Per-piece cut assessment and seam suggestion.
         let fabric: FabricProfile
-        if let warp = options.warpStretchPercent, let weft = options.weftStretchPercent {
+        if let maximumDarts = options.rigidMaximumDarts {
+            fabric = .rigid(maxDarts: maximumDarts)
+        } else if let warp = options.warpStretchPercent, let weft = options.weftStretchPercent {
             fabric = .twoWayStretch(warpPercent: warp, weftPercent: weft)
         } else {
             fabric = .none
@@ -192,6 +271,9 @@ public enum PlushAgent {
                 do {
                     if let best = try SeamSuggestionEngine.suggest(positions: component.positions, triangles: component.triangles, fabric: fabric, maximumSuggestions: 1).first {
                         seams = best.seamPaths.map { path in path.map { component.sourceVertices[$0] } }
+                        if let dir = options.outputDirectory, options.anatomyCuts != nil || subject.kind == .object {
+                            try JSONEncoder().encode(best.seamPaths).write(to: dir.appendingPathComponent("piece_\(component.id + 1)_seams.json"))
+                        }
                         panels = best.panelCount
                         areaDelta = best.worstAreaDelta
                         // The engine scores only the cuts it chose; the audit also covers cuts the flattener adds.

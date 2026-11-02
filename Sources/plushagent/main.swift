@@ -1,11 +1,14 @@
 import Foundation
 import TopologyKit
 
-// plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--json]
+// plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--mlx] [--adapter PATH] [--height CM] [--subject auto|creature|object] [--json]
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 var options = PlushAgentOptions()
 var wantsJSON = false
+var useMLX = false
+var adapterPath: String?
+var plushHeight = 50.0
 var inputPath: String?
 
 func fail(_ message: String) -> Never {
@@ -28,10 +31,21 @@ while !arguments.isEmpty {
     case "--stretch":
         guard arguments.count >= 2, let warp = Double(arguments[0]), let weft = Double(arguments[1]) else { fail("--stretch needs WARP and WEFT percentages") }
         arguments.removeFirst(2); options.warpStretchPercent = warp; options.weftStretchPercent = weft
+    case "--mlx":
+        useMLX = true
+    case "--adapter":
+        guard !arguments.isEmpty else { fail("--adapter needs a path") }
+        adapterPath = arguments.removeFirst()
+    case "--height":
+        guard let value = arguments.first.flatMap(Double.init), value > 0 else { fail("--height needs centimeters") }
+        arguments.removeFirst(); plushHeight = value
+    case "--subject":
+        guard let value = arguments.first.flatMap(SubjectOverride.init(rawValue:)) else { fail("--subject needs auto, creature or object") }
+        arguments.removeFirst(); options.subject = value
     case "--json":
         wantsJSON = true
     case "-h", "--help":
-        print("usage: plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--json]")
+        print("usage: plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--mlx] [--adapter PATH] [--height CM] [--subject auto|creature|object] [--json]")
         exit(0)
     default:
         guard inputPath == nil, !argument.hasPrefix("-") else { fail("unexpected argument: \(argument)") }
@@ -42,7 +56,16 @@ while !arguments.isEmpty {
 guard let inputPath else { fail("usage: plushagent <file.obj> [options]") }
 
 do {
-    let report = try PlushAgent.run(input: URL(fileURLWithPath: inputPath), options: options)
+    let report: PlushAgentReport
+    if useMLX {
+        let result = try await PlushAgent.runWithMLX(input: URL(fileURLWithPath: inputPath), options: options, adapterPath: adapterPath, plushHeightCentimeters: plushHeight)
+        print("MLX summary: \(result.summary)")
+        result.cuts.forEach { print("  cut: \($0)") }
+        result.patternFiles.forEach { print("  pattern: \($0)") }
+        report = result.report
+    } else {
+        report = try PlushAgent.run(input: URL(fileURLWithPath: inputPath), options: options)
+    }
     if wantsJSON {
         print(String(decoding: try report.json(), as: UTF8.self))
     } else {

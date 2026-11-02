@@ -45,6 +45,13 @@ enum PatternRenderer {
                 if piece.mirroredCopies > 0 { caption += " (\(piece.mirroredCopies) mirrored)" }
             }
             drawText(caption, at: center, size: 14, centered: true, in: ctx)
+            for (i, note) in piece.notes.enumerated() {
+                drawText(note, at: CGPoint(x: center.x, y: center.y + 12 + 9 * Double(i)), size: 7, centered: true, in: ctx)
+            }
+            ctx.setLineDash(phase: 0, lengths: [])
+            for apex in piece.dartApexes {
+                ctx.strokeEllipse(in: CGRect(x: apex.x - 3, y: apex.y - 3, width: 6, height: 6))
+            }
 
             ctx.setLineDash(phase: 0, lengths: [])
             for label in piece.seamLabels {

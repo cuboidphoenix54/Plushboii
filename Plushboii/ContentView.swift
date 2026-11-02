@@ -10,7 +10,7 @@ private enum ImportKind {
     case model
 }
 
-private enum FabricChoice: String, CaseIterable, Identifiable {
+private enum FabricChoice: String, CaseIterable, Identifiable, Sendable {
     case none = "No fabric adjustment"
     case minky = "2-way stretch minky"
     case canvas = "Rigid canvas (darts)"
@@ -23,6 +23,110 @@ private enum FabricChoice: String, CaseIterable, Identifiable {
         case .minky: .twoWayStretch(warpPercent: 50, weftPercent: 40)
         case .canvas: .rigid(maxDarts: 4)
         }
+    }
+}
+
+private struct AIPipelineReview: Sendable {
+    let components: [MeshComponent]
+    let seamPaths: [Int: [[Int]]]
+    let summary: String
+    let outputDirectory: URL
+}
+
+private enum AIPipelineRunner {
+    static func run(
+        positions: [Vec3],
+        triangles: [Int32],
+        subject: SubjectOverride,
+        model: String,
+        fabric: FabricChoice,
+        seamAllowancePoints: Double
+    ) async throws -> AIPipelineReview {
+        guard let supportDirectory = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let outputDirectory = supportDirectory
+            .appendingPathComponent("Plushboii/AIJobs/\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
+        var obj = ""
+        obj.reserveCapacity(positions.count * 32 + triangles.count * 10)
+        for point in positions {
+            obj += "v \(point.x) \(point.y) \(point.z)\n"
+        }
+        for corner in stride(from: 0, to: triangles.count, by: 3) {
+            obj += "f \(triangles[corner] + 1) \(triangles[corner + 1] + 1) \(triangles[corner + 2] + 1)\n"
+        }
+        let inputURL = outputDirectory.appendingPathComponent("source.obj")
+        try Data(obj.utf8).write(to: inputURL)
+
+        var options = PlushAgentOptions()
+        options.outputDirectory = outputDirectory
+        options.subject = subject
+        options.seamAllowancePoints = seamAllowancePoints
+        switch fabric {
+        case .none:
+            break
+        case .minky:
+            options.warpStretchPercent = 50
+            options.weftStretchPercent = 40
+        case .canvas:
+            options.rigidMaximumDarts = 4
+        }
+
+        let result = try await PlushAgent.runWithMLX(
+            input: inputURL,
+            options: options,
+            adapterPath: nil,
+            advisorModel: model
+        )
+        var components: [MeshComponent] = []
+        var seamPaths: [Int: [[Int]]] = [:]
+        for piece in result.report.pieces {
+            guard let file = piece.file else { continue }
+            let meshURL = outputDirectory.appendingPathComponent(file)
+            let mesh = try OBJMeshReader.read(Data(contentsOf: meshURL)).topologyInput
+            components.append(MeshComponent(
+                id: piece.index,
+                positions: mesh.positions,
+                triangles: mesh.triangles,
+                sourceVertices: Array(mesh.positions.indices),
+                anatomicalLabel: piece.label
+            ))
+            let seamURL = outputDirectory.appendingPathComponent("piece_\(piece.index + 1)_seams.json")
+            if let data = try? Data(contentsOf: seamURL),
+               let paths = try? JSONDecoder().decode([[Int]].self, from: data) {
+                seamPaths[piece.index] = paths
+            }
+        }
+        guard !components.isEmpty else {
+            throw PlushAgentError.unreadable("The AI pipeline finished without producing any mesh pieces.")
+        }
+
+        let pieceSummary = result.report.pieces.map { piece in
+            let panels = piece.panelCount.map { ", \($0) panels" } ?? ""
+            let issue = piece.issue ?? piece.advisory ?? "Ready"
+            return "\(piece.label): \(issue)\(panels)"
+        }
+        let cutSummary = result.cuts.isEmpty
+            ? nil
+            : "Suggested cut boundaries: " + result.cuts.joined(separator: "; ")
+        let summary = [
+            "Subject: \(result.report.subjectKind) (score \(result.report.subjectScore.formatted(.number.precision(.fractionLength(2))))).",
+            "Preparation: \(result.report.originalFaces.formatted()) faces → \(result.report.finalFaces.formatted()); \(result.report.orientationStable ? "stable" : "review") orientation.",
+            "Pipeline: \(result.report.verdict). \(result.summary)",
+            cutSummary,
+            pieceSummary.joined(separator: "\n"),
+            result.report.warnings.isEmpty ? nil : "Warnings: " + result.report.warnings.joined(separator: " ")
+        ].compactMap { $0 }.joined(separator: "\n")
+        return AIPipelineReview(
+            components: components,
+            seamPaths: seamPaths,
+            summary: summary,
+            outputDirectory: outputDirectory
+        )
     }
 }
 
@@ -81,6 +185,12 @@ struct ContentView: View {
     @State private var dedupeCongruent = true
     @State private var labelSeams = true
     @State private var showFurArrows = true
+    @State private var seamAllowance = SeamAllowanceOption.standard
+    @State private var flatByPiece: [UUID: FlatteningResult] = [:]
+    @State private var flattenFailures: [UUID: String] = [:]
+    @State private var galleryGroups: [PanelGalleryGroup] = []
+    @State private var isShowingPanelGallery = false
+    @State private var isFlatteningAll = false
     @State private var fabricWidthCm = "110"
     @State private var fabricNeeded: String?
     @State private var flattening: FlatteningResult?
@@ -95,6 +205,10 @@ struct ContentView: View {
     @State private var plushiePatternPlan: PlushiePatternPlan?
     @State private var pendingMeshSplit: [MeshComponent]?
     @State private var pendingAnatomicalSplit: (components: [MeshComponent], plan: AnatomicalCutPlan)?
+    @State private var pendingPipelineSeams: [Int: [[Int]]] = [:]
+    @State private var subjectOverride: SubjectOverride = .auto
+    @State private var aiPipelineSummary: String?
+    @State private var aiPipelineOutputURL: URL?
     @State private var isAnalyzingAnatomy = false
     @State private var anatomyPreviewToken = 0
     @State private var isSuggestingSeams = false
@@ -103,6 +217,7 @@ struct ContentView: View {
     @State private var ollamaStatus: String?
     @State private var isLoadingOllamaModels = false
     @State private var isShowingLocalModelSettings = false
+    @State private var isShowingTrainingDashboard = false
     @State private var referenceImageForPiece: (pieceID: UUID, url: URL)?
     @State private var previewSeamSuggestionID: String?
     @State private var showError = false
@@ -146,8 +261,30 @@ struct ContentView: View {
             detailView
         }
         .navigationTitle("Plushboii")
+        .sheet(isPresented: $isShowingPanelGallery) {
+            VStack(alignment: .trailing, spacing: 0) {
+                PanelGalleryView(
+                    groups: galleryGroups,
+                    allowance: seamAllowance,
+                    isScaled: centimetersPerMeshUnitValue != nil,
+                    isBusy: isFlatteningAll,
+                    onFlattenAll: { Task { await flattenAllPieces() } }
+                )
+                Button("Done") { isShowingPanelGallery = false }
+                    .keyboardShortcut(.defaultAction)
+                    .padding([.horizontal, .bottom])
+            }
+            .frame(minWidth: 760, minHeight: 520)
+            .task { await rebuildGallery() }
+            .onChange(of: seamAllowance) { _, _ in Task { await rebuildGallery() } }
+            .onChange(of: centimetersPerMeshUnit) { _, _ in Task { await rebuildGallery() } }
+            .onChange(of: plushHeightCentimeters) { _, _ in Task { await rebuildGallery() } }
+        }
         .sheet(isPresented: $isShowingLocalModelSettings) {
             LocalModelSettingsView()
+        }
+        .sheet(isPresented: $isShowingTrainingDashboard) {
+            TrainingDashboardView()
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -157,7 +294,16 @@ struct ContentView: View {
                 .help("Create a pattern document")
                 .disabled(isImporting)
             }
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    isShowingTrainingDashboard = true
+                } label: {
+                    Label("Training", systemImage: "chart.xyaxis.line")
+                }
+                .help("Open the MLX training dashboard")
+            }
         }
+
         .fileImporter(
             isPresented: $isChoosingFile,
             allowedContentTypes: fileImportKind == .model ? Self.modelTypes : [.image],
@@ -187,6 +333,7 @@ struct ContentView: View {
                     if !$0 {
                         pendingMeshSplit = nil
                         pendingAnatomicalSplit = nil
+                        pendingPipelineSeams = [:]
                         anatomyPreviewToken += 1
                     }
                 }
@@ -195,7 +342,11 @@ struct ContentView: View {
         ) {
             if let pendingAnatomicalSplit {
                 Button("Create \(pendingAnatomicalSplit.components.count) Anatomy Pieces") {
-                    createPieces(from: pendingAnatomicalSplit.components, anatomyPlan: pendingAnatomicalSplit.plan)
+                    createPieces(
+                        from: pendingAnatomicalSplit.components,
+                        anatomyPlan: pendingAnatomicalSplit.plan,
+                        seamPathsByComponentID: pendingPipelineSeams
+                    )
                 }
             } else if let pendingMeshSplit {
                 Button("Create \(pendingMeshSplit.count) Pieces") {
@@ -205,6 +356,7 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {
                 pendingMeshSplit = nil
                 pendingAnatomicalSplit = nil
+                pendingPipelineSeams = [:]
                 anatomyPreviewToken += 1
             }
         } message: {
@@ -227,6 +379,7 @@ struct ContentView: View {
         .onChange(of: selectedPatternID) { _, _ in
             pendingMeshSplit = nil
             pendingAnatomicalSplit = nil
+            pendingPipelineSeams = [:]
             joints = []
             isPlacingJoint = false
             anatomyPreviewToken += 1
@@ -235,6 +388,7 @@ struct ContentView: View {
         .onChange(of: selectedPieceID) { _, _ in
             pendingMeshSplit = nil
             pendingAnatomicalSplit = nil
+            pendingPipelineSeams = [:]
             joints = []
             isPlacingJoint = false
             anatomyPreviewToken += 1
@@ -245,6 +399,7 @@ struct ContentView: View {
         previewSeamSuggestionID = nil
         seamAdviceStatus = nil
         }
+        .onAppear { Task { await refreshOllamaModels() } }
         .task(id: meshToken) {
             await seamEditor.load(piece: selectedPiece)
             seamSuggestions = []
@@ -373,6 +528,7 @@ struct ContentView: View {
                 .padding()
 
                 if let selectedPiece {
+                    aiWorkflowPanel
                     seamToolbar
                     jointToolbar
                     if !seamSuggestions.isEmpty || seamAdviceStatus != nil {
@@ -380,6 +536,13 @@ struct ContentView: View {
                     }
                     if flattening != nil {
                         patternOutputToolbar
+                    } else {
+                        HStack {
+                            Button("Panels") { isShowingPanelGallery = true }
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
                     }
                     MeshSceneView(
                         mesh: seamEditor.mesh,
@@ -578,6 +741,123 @@ struct ContentView: View {
         }
     }
 
+    private var aiWorkflowPanel: some View {
+        GroupBox("AI mesh workflow") {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Picker("Subject", selection: $subjectOverride) {
+                        Text("Automatic").tag(SubjectOverride.auto)
+                        Text("Creature").tag(SubjectOverride.creature)
+                        Text("Object").tag(SubjectOverride.object)
+                    }
+                    .frame(maxWidth: 180)
+                    Button(isAnalyzingAnatomy ? "Processing…" : "Run Full Pipeline", systemImage: "sparkles") {
+                        runAIPipeline()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        seamEditor.mesh == nil || isAnalyzingAnatomy || isSuggestingSeams
+                            || isFlattening || seamEditor.isBusy || !seamEditor.seams.isEmpty
+                            || ollamaModel.isEmpty
+                            || (selectedPattern.flatMap { PatternDomain(rawValue: $0.domainRawValue) } ?? .plushie) != .plushie
+                    )
+                    .help("Prepare and classify the mesh, propose anatomy cuts or object handling, suggest seams, and generate a reviewable pattern.")
+                    if let aiPipelineOutputURL {
+                        Button("Open Run Folder", systemImage: "folder") {
+                            NSWorkspace.shared.open(aiPipelineOutputURL)
+                        }
+                    }
+                    if !seamEditor.seams.isEmpty {
+                        Text("Clear manual seams to run.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                HStack {
+                    Text("\(fabricChoice.rawValue) · \(seamAllowance.displayName) allowance")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Preparation, classification, cuts, seams, pattern export")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Generated pieces remain a preview until you confirm.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let aiPipelineSummary {
+                    DisclosureGroup("Last AI run report") {
+                        Text(aiPipelineSummary)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+
+    private func runAIPipeline() {
+        guard let topology = seamEditor.mesh else { return }
+        guard !ollamaModel.isEmpty else {
+            importStatus = "Choose a local vision model before running the AI workflow."
+            return
+        }
+        guard seamEditor.seams.isEmpty else {
+            importStatus = "Clear existing seams before running the full AI workflow."
+            return
+        }
+        guard (selectedPattern.flatMap { PatternDomain(rawValue: $0.domainRawValue) } ?? .plushie) == .plushie else {
+            importStatus = "The AI mesh workflow is available for plushie patterns."
+            return
+        }
+
+        let pieceID = selectedPieceID
+        let meshID = topology.id
+        let positions = topology.positions.map { Vec3($0.x, $0.y, $0.z) }
+        let triangles = topology.triangles
+        let subject = subjectOverride
+        let model = ollamaModel
+        let fabric = fabricChoice
+        let allowance = seamAllowance.points
+        isAnalyzingAnatomy = true
+        aiPipelineSummary = nil
+        importStatus = "Preparing the mesh and running the local AI pattern pipeline…"
+
+        Task {
+            defer { isAnalyzingAnatomy = false }
+            do {
+                let review = try await Task.detached(priority: .userInitiated) {
+                    try await AIPipelineRunner.run(
+                        positions: positions,
+                        triangles: triangles,
+                        subject: subject,
+                        model: model,
+                        fabric: fabric,
+                        seamAllowancePoints: allowance
+                    )
+                }.value
+                guard selectedPieceID == pieceID, seamEditor.mesh?.id == meshID else { return }
+                pendingMeshSplit = nil
+                pendingPipelineSeams = review.seamPaths
+                pendingAnatomicalSplit = (
+                    review.components,
+                    AnatomicalCutPlan(summary: review.summary, cuts: [])
+                )
+                aiPipelineSummary = review.summary
+                aiPipelineOutputURL = review.outputDirectory
+                anatomyPreviewToken += 1
+                importStatus = "AI run complete. Review the color-coded regions before saving \(review.components.count) pieces."
+            } catch {
+                guard selectedPieceID == pieceID, seamEditor.mesh?.id == meshID else { return }
+                aiPipelineSummary = "AI workflow failed: \(error.localizedDescription)"
+                importStatus = "AI workflow failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
     private var seamToolbar: some View {
         HStack(spacing: 12) {
             Toggle(isOn: $isSeamToolActive) {
@@ -717,7 +997,13 @@ struct ContentView: View {
                 Toggle("Merge identical pieces", isOn: $dedupeCongruent)
                 Toggle("Label seams", isOn: $labelSeams)
                 Toggle("Fur direction arrows", isOn: $showFurArrows)
+                Picker("Seam allowance", selection: $seamAllowance) {
+                    ForEach(SeamAllowanceOption.allCases) { option in
+                        Text("\(option.displayName) - \(option.usage)").tag(option)
+                    }
+                }
             }
+            Button("Panels") { isShowingPanelGallery = true }
             TextField("fabric cm", text: $fabricWidthCm)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 80)
@@ -746,11 +1032,24 @@ struct ContentView: View {
         }
         guard let height = Double(plushHeightCentimeters.trimmingCharacters(in: .whitespacesAndNewlines)),
               height.isFinite, height > 0,
-              let positions = seamEditor.mesh?.positions,
+              let positions = wholePlushPositions(),
               let up = ModelPreparation.orientationCandidates(positions: positions).first?.up else { return nil }
         let heights = positions.map { vdot($0, up) }
         guard let low = heights.min(), let high = heights.max(), high - low > 0 else { return nil }
         return height / (high - low)
+    }
+
+    /// Plush height describes the whole plush, so the scale comes from every piece of the pattern, not the selected one.
+    private func wholePlushPositions() -> [Vec3]? {
+        var all: [Vec3] = []
+        for piece in selectedPattern?.pieces ?? [] where piece.vertexData.count % (3 * MemoryLayout<Double>.size) == 0 {
+            var coordinates = [Double](repeating: 0, count: piece.vertexData.count / MemoryLayout<Double>.size)
+            coordinates.withUnsafeMutableBytes { _ = piece.vertexData.copyBytes(to: $0) }
+            for index in stride(from: 0, to: coordinates.count, by: 3) {
+                all.append(Vec3(coordinates[index], coordinates[index + 1], coordinates[index + 2]))
+            }
+        }
+        return all.isEmpty ? seamEditor.mesh?.positions : all
     }
 
     private func persistSeams(_ seams: [SeamPath]) {
@@ -1025,10 +1324,15 @@ struct ContentView: View {
         }
     }
 
-    private func createPieces(from components: [MeshComponent], anatomyPlan: AnatomicalCutPlan? = nil) {
+    private func createPieces(
+        from components: [MeshComponent],
+        anatomyPlan: AnatomicalCutPlan? = nil,
+        seamPathsByComponentID: [Int: [[Int]]] = [:]
+    ) {
         guard let pattern = selectedPattern, let sourcePiece = selectedPiece else { return }
         pendingMeshSplit = nil
         pendingAnatomicalSplit = nil
+        pendingPipelineSeams = [:]
         anatomyPreviewToken += 1
         let format = sourcePiece.sourceMeshFormat ?? "mesh"
         var nextOrder = (pattern.pieces.map(\.sortOrder).max() ?? -1) + 1
@@ -1058,6 +1362,9 @@ struct ContentView: View {
                 modelContext.insert(piece)
                 createdPieces.append(piece)
                 try persist(mesh, into: piece, format: format, name: piece.name, saveChanges: false)
+                if let seamPaths = seamPathsByComponentID[component.id] {
+                    piece.seamPathData = try JSONEncoder().encode(seamPaths)
+                }
             }
             try modelContext.save()
             pattern.modifiedAt = .now
@@ -1088,14 +1395,19 @@ struct ContentView: View {
         isLoadingOllamaModels = true
         defer { isLoadingOllamaModels = false }
         do {
+            let previous = ollamaModels
             ollamaModels = try await OnDeviceSeamAdvisor.availableModels()
-            if !ollamaModels.contains(ollamaModel) {
+            let mlx = OnDeviceSeamAdvisor.mlxModelName
+            if ollamaModels.contains(mlx), !previous.contains(mlx) {
+                ollamaModel = mlx
+            } else if !ollamaModels.contains(ollamaModel) {
                 ollamaModel = ollamaModels.first ?? ""
             }
             ollamaStatus = ollamaModels.isEmpty
                 ? "No local AI models found. Start mlx-vlm or Ollama, then refresh."
                 : "Local AI models found. Choose a vision-capable model for image-based guidance."
         } catch {
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { return }
             ollamaModels = []
             ollamaModel = ""
             ollamaStatus = error.localizedDescription
@@ -1122,17 +1434,32 @@ struct ContentView: View {
                 )
             }
             flattening = result
+            if let id = selectedPieceID {
+                flatByPiece[id] = result
+                flattenFailures[id] = nil
+            }
             let quality = try await offMainActor {
                 let q = result.islands.map { PatternQualityMap.evaluate(island: $0, positions: positions) }
-                return (
-                    PatternQualityMap.meshVertexSeverity(result: result, positions: positions),
-                    q.map(\.worstStretch).max() ?? 0,
-                    q.reduce(0) { $0 + $1.flippedTriangles }
-                )
+                var totalArea = 0.0, weightedMean = 0.0, saturated = 0.0
+                var flippedCount = 0
+                var worstValue = 0.0
+                for item in q {
+                    totalArea += item.totalArea
+                    weightedMean += item.meanStretch * item.totalArea
+                    saturated += item.saturatedArea
+                    flippedCount += item.flippedTriangles
+                    worstValue = max(worstValue, item.worstStretch)
+                }
+                let divisor = max(totalArea, 1e-12)
+                let severity = PatternQualityMap.meshVertexSeverity(result: result, positions: positions)
+                return (severity, worstValue, flippedCount, weightedMean / divisor, saturated / divisor)
             }
             heatSeverity = quality.0.count == seamEditor.mesh?.positions.count ? quality.0 : nil
             heatToken += 1
-            qualitySummary = "Worst stretch \((quality.1 * 100).formatted(.number.precision(.fractionLength(0))))%"
+            let percent: (Double) -> String = { ($0 * 100).formatted(.number.precision(.fractionLength(1))) }
+            let limit = Int(PatternQualityMap.saturationStretch * 100)
+            let worstText = (quality.1 * 100).formatted(.number.precision(.fractionLength(0)))
+            qualitySummary = "Average stretch \(percent(quality.3))%; \(percent(quality.4))% of the surface stretches over \(limit)% (worst single triangle \(worstText)%, usually a sliver)"
                 + (quality.2 > 0 ? ", \(quality.2) flipped triangle(s)" : "")
             let worst = result.islands.map(\.report.areaDelta).max() ?? 0
             let darts = result.islands.reduce(0) { $0 + $1.darts.count }
@@ -1147,10 +1474,82 @@ struct ContentView: View {
         }
     }
 
+    /// Flattens every stored piece with its saved seams so the gallery can show all panels at once.
+    private func flattenAllPieces() async {
+        guard let pattern = selectedPattern else { return }
+        struct Input: Sendable {
+            let id: UUID
+            let points: [RawControlPoint]
+            let vertexData: Data
+            let faceData: Data
+            let seamData: Data
+        }
+        let inputs = pattern.pieces.sorted { $0.sortOrder < $1.sortOrder }
+            .filter { flatByPiece[$0.id] == nil || $0.id != selectedPieceID }
+            .map { piece in
+                Input(
+                    id: piece.id,
+                    points: piece.vertexData.isEmpty ? piece.controlPoints.map { RawControlPoint(index: $0.index, x: $0.x, y: $0.y, z: $0.z) } : [],
+                    vertexData: piece.vertexData, faceData: piece.faceIndexData, seamData: piece.seamPathData
+                )
+            }
+        let fabric = fabricChoice.profile
+        isFlatteningAll = true
+        defer { isFlatteningAll = false }
+        for input in inputs {
+            do {
+                let result = try await offMainActor {
+                    guard let loaded = MeshTopology.load(points: input.points, vertexData: input.vertexData, faceData: input.faceData, seamData: input.seamData) else {
+                        throw FlatteningError.invalidMesh("The stored mesh could not be loaded.")
+                    }
+                    return try TopologyEngine.flatten(
+                        positions: loaded.topology.positions,
+                        triangles: loaded.topology.triangles,
+                        seams: loaded.seams.map(\.vertices),
+                        fabric: fabric
+                    )
+                }
+                flatByPiece[input.id] = result
+                flattenFailures[input.id] = nil
+            } catch {
+                flattenFailures[input.id] = error.localizedDescription
+            }
+            await rebuildGallery()
+        }
+    }
+
+    private func rebuildGallery() async {
+        guard let pattern = selectedPattern else { galleryGroups = []; return }
+        let allowance = seamAllowance.points
+        let named = pattern.pieces.sorted { $0.sortOrder < $1.sortOrder }.map { ($0.id, $0.name) }
+        let flats = flatByPiece
+        let failures = flattenFailures
+        let knownScale = centimetersPerMeshUnitValue
+        let groups = (try? await offMainActor {
+            named.compactMap { id, name -> PanelGalleryGroup? in
+                guard let result = flats[id] else {
+                    return failures[id].map { PanelGalleryGroup(id: id, name: name, cards: [], failure: $0) }
+                }
+                // Without a physical scale, show the piece at an arbitrary 30 cm so the panels can still be inspected.
+                let extent = result.islands.flatMap(\.uv).reduce(0.0) { max($0, abs($1.x), abs($1.y)) }
+                let scale = knownScale ?? 15 / max(extent, 1e-9)
+                do {
+                    let cards = try PanelGallery.cards(pieceName: name, result: result, centimetersPerUnit: scale, seamAllowancePoints: allowance)
+                    return PanelGalleryGroup(id: id, name: name, cards: cards, failure: nil)
+                } catch {
+                    return PanelGalleryGroup(id: id, name: name, cards: [], failure: error.localizedDescription)
+                }
+            }
+        }) ?? []
+        galleryGroups = groups
+    }
+
     private var layoutOptions: LayoutOptions {
         var options = LayoutOptions()
         options.deduplicateCongruent = dedupeCongruent
         options.labelSeams = labelSeams
+        options.seamAllowancePoints = seamAllowance.points
+        options.includeSewingNotes = true
         options.furDirectionDegrees = showFurArrows ? 90 : nil
         if let piece = selectedPiece, let islands = flattening?.islands {
             for index in islands.indices {

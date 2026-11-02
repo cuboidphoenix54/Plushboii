@@ -104,8 +104,9 @@ enum OpenPieceSeams {
         fabric: FabricProfile,
         maximumChords: Int = 10
     ) throws -> Solution? {
-        guard !boundaryLoops(triangles: triangles).isEmpty else { return nil }
-        var seams = joiningSeams(positions: positions, triangles: triangles)
+        let handleSeams = HandleSeams.seams(positions: positions, triangles: triangles)
+        guard !boundaryLoops(triangles: triangles).isEmpty || !handleSeams.isEmpty else { return nil }
+        var seams = handleSeams.isEmpty ? joiningSeams(positions: positions, triangles: triangles) : handleSeams
         var neighbours = [[Int]](repeating: [], count: positions.count)
         var seen = Set<UInt64>()
         for t in stride(from: 0, to: triangles.count, by: 3) {

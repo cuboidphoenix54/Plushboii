@@ -113,8 +113,11 @@ enum SeamAdviceResult: Sendable {
 enum OnDeviceSeamAdvisor {
     static let anatomyPrompt = """
         You are proposing plushie construction boundaries on a known 3D mesh.
-        The user wants an anatomy-first construction: head, torso, and appendages. Eyes, nose, and mouth are
-        embroidered or added after sewing and must never be treated as fabric panels.
+        Plan an anatomy-first construction around useful sewable components: head, torso, neck, limbs,
+        paws/feet, wings, fins, ears, horns, tails, tentacles, or other clearly visible anatomy. Preserve
+        asymmetry when present. Eyes, nose, mouth, markings, claws, and small surface details are usually
+        embroidered or attached after sewing; do not treat them as stuffed panels. Visual style alone does
+        not establish anatomy.
 
         The three attached images are orthographic renders of the exact same mesh and are registered to its axes:
         1. Front looks along +Z; image right is +X and image up is +Y.
@@ -124,12 +127,15 @@ enum OnDeviceSeamAdvisor {
         A proposed cut is an axis-aligned plane. Its normalizedPosition is measured from 0 to 1 across that
         axis's full mesh bounds. For example, 0.5 is the midpoint between the minimum and maximum coordinate.
 
-        Return only clear, visible boundaries supported by these views. Prefer a small number of useful cuts.
-        Do not invent hidden anatomy, diagonal cuts, vertex paths, measurements, or geometry. Do not output cuts
-        solely to create arbitrary panels. If the anatomy is ambiguous, lower confidence and explain that in summary.
-        Return no more than 9 cuts. Every cut must be between 0.1 and 0.9 and confidence must be at least 0.55. For each cut, provide the
-        anatomical region on the negative (lower coordinate) side and positive (higher coordinate) side. Use
-        stable names such as head, torso, left appendage, right appendage, or lower appendage.
+        Return only useful boundaries supported by these views; prefer the fewest cuts that separate visible,
+        sewable anatomical components. Do not cut through broad regions just to create panels. Do not invent
+        hidden anatomy, diagonal cuts, vertex paths, measurements, bounds, geometry, or stitch paths. Closed
+        components may need additional seams or multiple flattened panels later; this task only proposes
+        anatomy cuts, not panel geometry. If the anatomy or laterality is ambiguous, lower confidence and
+        explain the limitation in summary.
+        Return no more than 9 cuts. Every cut must be between 0.1 and 0.9 and confidence must be at least 0.55.
+        For each cut, provide the anatomical region on the negative (lower coordinate) side and positive
+        (higher coordinate) side. Use concise, stable names and do not assume bilateral symmetry.
         """
 
     private static let client = OllamaSeamAdvisorClient()

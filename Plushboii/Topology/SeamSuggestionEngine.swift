@@ -67,7 +67,7 @@ enum SeamSuggestionEngine {
         }
         try fabric.validated()
 
-        if !OpenPieceSeams.boundaryLoops(triangles: triangles).isEmpty {
+        if !OpenPieceSeams.boundaryLoops(triangles: triangles).isEmpty || HandleSeams.genus(triangles: triangles) > 0 {
             guard let suggestion = try OpenPieceSeams.suggestion(positions: positions, triangles: triangles, fabric: fabric) else { return [] }
             return [suggestion]
         }

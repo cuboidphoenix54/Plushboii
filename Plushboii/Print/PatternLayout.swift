@@ -65,6 +65,12 @@ struct PlacedPiece: Sendable {
     var seamLabels: [SeamLabel] = []
     var furArrow: FurArrow?
     var details: [PlacedDetail] = []
+    /// Sewing instructions (darts, gathers, eases) printed under the caption.
+    var notes: [String] = []
+    /// Dart apex positions in page points.
+    var dartApexes: [Vec2] = []
+    /// Seam allowance used to build `cutLine`, in points.
+    var seamAllowancePoints = PatternUnits.seamAllowancePoints
 }
 
 struct LayoutOptions: Sendable {
@@ -73,6 +79,10 @@ struct LayoutOptions: Sendable {
     /// Print congruent pieces once, with the number of copies noted.
     var deduplicateCongruent = false
     var labelSeams = false
+    /// Distance between sewing line and cutting line, in points.
+    var seamAllowancePoints = PatternUnits.seamAllowancePoints
+    /// Print dart apexes and join notes (ease, gather) on each piece.
+    var includeSewingNotes = false
     /// Nap direction on the page in degrees, 0 = along +x, 90 = down the page. Nil omits fur arrows.
     var furDirectionDegrees: Double?
     var details: [DetailSpec] = []
@@ -112,6 +122,9 @@ enum PatternLayout {
             return options.names[rep] ?? "Piece \(result.islands[rep].segmentIndex + 1)"
         }
         let sections = options.labelSeams ? SeamSections.sections(for: result) : []
+        let sewingNotes = options.includeSewingNotes
+            ? SewingGuide.notes(for: result, centimetersPerUnit: centimetersPerUnit)
+            : []
 
         struct Prepared {
             let island: UVIsland
@@ -131,7 +144,7 @@ enum PatternLayout {
                 let points = PatternGeometry.relaxed(boundary, passes: passes)
                 let seam = PatternGeometry.smoothClosedPath(through: points)
                 do {
-                    let offset = try PatternGeometry.offset(seam, distance: PatternUnits.seamAllowancePoints, segmentIndex: island.segmentIndex)
+                    let offset = try PatternGeometry.offset(seam, distance: options.seamAllowancePoints, segmentIndex: island.segmentIndex)
                     return Prepared(island: island, group: group, seam: seam, cut: offset.path, joins: offset.unresolvedConcaveJoins)
                 } catch { lastError = error }
             }
@@ -139,7 +152,7 @@ enum PatternLayout {
             var fallback: Prepared?
             for passes in [0, 4, 12, 32] {
                 let polygon = PatternGeometry.smoothClosedPath(through: PatternGeometry.relaxed(boundary, passes: passes), allCorners: true)
-                guard let offset = try? PatternGeometry.offset(polygon, distance: PatternUnits.seamAllowancePoints, segmentIndex: island.segmentIndex) else { continue }
+                guard let offset = try? PatternGeometry.offset(polygon, distance: options.seamAllowancePoints, segmentIndex: island.segmentIndex) else { continue }
                 let candidate = Prepared(island: island, group: group, seam: polygon, cut: offset.path, joins: offset.unresolvedConcaveJoins)
                 if candidate.joins == 0 { return candidate }
                 if fallback == nil || candidate.joins < fallback!.joins { fallback = candidate }
@@ -181,12 +194,18 @@ enum PatternLayout {
                     )
                     piece.copies = group.copies
                     piece.mirroredCopies = group.mirroredCopies
+                    piece.seamAllowancePoints = options.seamAllowancePoints
+                    if island.segmentIndex < sewingNotes.count {
+                        let guide = sewingNotes[group.representative]
+                        piece.notes = guide.summaryLines
+                        piece.dartApexes = guide.darts.map { move($0.apexUV * scale) }
+                    }
 
                     if options.labelSeams, island.segmentIndex < sections.count,
                        let loop = try? PatternGeometry.boundaryIndices(of: island) {
                         piece.seamLabels = seamLabels(
                             sections: sections[island.segmentIndex], loop: loop, island: island,
-                            scale: scale, move: move, name: name(of:)
+                            scale: scale, allowance: options.seamAllowancePoints, move: move, name: name(of:)
                         )
                     }
                     if let degrees = options.furDirectionDegrees {
@@ -222,6 +241,7 @@ enum PatternLayout {
         loop: [Int32],
         island: UVIsland,
         scale: Double,
+        allowance: Double,
         move: (Vec2) -> Vec2,
         name: (Int) -> String
     ) -> [SeamLabel] {
@@ -240,7 +260,7 @@ enum PatternLayout {
             guard span > 1e-9 else { continue }
             let tangent = (b - a) / span
             let outward = Vec2(tangent.y, -tangent.x)
-            let anchor = (a + b) / 2 + outward * (PatternUnits.seamAllowancePoints * 0.5)
+            let anchor = (a + b) / 2 + outward * (allowance * 0.5)
             let page0 = move(anchor), page1 = move(anchor + tangent)
             var angle = atan2(page1.y - page0.y, page1.x - page0.x)
             if angle > Double.pi / 2 { angle -= Double.pi }

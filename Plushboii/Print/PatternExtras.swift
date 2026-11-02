@@ -129,6 +129,12 @@ enum PatternSVGExporter {
                     if piece.mirroredCopies > 0 { caption += " (\(piece.mirroredCopies) mirrored)" }
                 }
                 out += "    <text id=\"label-\(id)\" x=\"\(f((box.minX + box.maxX) / 2))\" y=\"\(f((box.minY + box.maxY) / 2))\" font-size=\"14\" text-anchor=\"middle\" fill=\"black\" stroke=\"none\">\(caption)</text>\n"
+                for (i, note) in piece.notes.enumerated() {
+                    out += "    <text id=\"note-\(id)-\(i)\" x=\"\(f((box.minX + box.maxX) / 2))\" y=\"\(f((box.minY + box.maxY) / 2 + 12 + 9 * Double(i)))\" font-size=\"7\" text-anchor=\"middle\" fill=\"black\" stroke=\"none\">\(escape(note))</text>\n"
+                }
+                for (i, apex) in piece.dartApexes.enumerated() {
+                    out += "    <circle id=\"dart-\(id)-\(i)\" cx=\"\(f(apex.x))\" cy=\"\(f(apex.y))\" r=\"3\" stroke-width=\"0.5\" fill=\"none\"/>\n"
+                }
                 for (i, label) in piece.seamLabels.enumerated() {
                     out += "    <text id=\"seam-\(id)-\(i)\" x=\"0\" y=\"0\" font-size=\"6\" text-anchor=\"middle\" fill=\"black\" stroke=\"none\" transform=\"translate(\(f(label.position.x)) \(f(label.position.y))) rotate(\(f(label.angle * 180 / .pi)))\">\(escape(label.text))</text>\n"
                 }

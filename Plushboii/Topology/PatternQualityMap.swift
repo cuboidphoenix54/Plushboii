@@ -14,6 +14,9 @@ enum PatternQualityMap {
         let worstStretch: Double
         let meanStretch: Double
         let flippedTriangles: Int
+        /// 3D surface area of triangles stretched past `saturationStretch`.
+        let saturatedArea: Double
+        let totalArea: Double
     }
 
     static func evaluate(island: UVIsland, positions: [Vec3]) -> IslandQuality {
@@ -87,7 +90,9 @@ enum PatternQualityMap {
             vertexSeverity: vertexSeverity,
             worstStretch: finiteStretch,
             meanStretch: total3D > 0 ? weightedSum / total3D : 0,
-            flippedTriangles: flipped
+            flippedTriangles: flipped,
+            saturatedArea: zip(stretch, area3D).reduce(0) { $1.0 > saturationStretch ? $0 + $1.1 : $0 },
+            totalArea: total3D
         )
     }
 
