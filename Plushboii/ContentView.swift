@@ -422,7 +422,17 @@ struct ContentView: View {
         previewSeamSuggestionID = nil
         seamAdviceStatus = nil
         }
-        .onAppear { Task { await refreshMLXModels() } }
+        .onAppear {
+            Task { await refreshMLXModels() }
+            if let path = UserDefaults.standard.string(forKey: "PlushboiiImport") {
+                importModelFile(at: URL(fileURLWithPath: path))
+            }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first(where: { ["obj", "stl", "usdz"].contains($0.pathExtension.lowercased()) }) else { return false }
+            importModelFile(at: url)
+            return true
+        }
         .task(id: meshToken) {
             await seamEditor.load(piece: selectedPiece)
             seamSuggestions = []
@@ -1146,6 +1156,23 @@ struct ContentView: View {
             ? "Running on the Neural Engine..."
             : "Importing and validating mesh..."
         isChoosingFile = true
+    }
+
+    /// Imports a model without the file picker (drag and drop, or the `-PlushboiiImport <path>` launch argument).
+    private func importModelFile(at url: URL) {
+        guard !isImporting else { return }
+        let pattern: Pattern
+        if let existing = selectedPattern {
+            pattern = existing
+        } else {
+            pattern = Pattern(name: url.deletingPathExtension().lastPathComponent)
+            modelContext.insert(pattern)
+            do { try modelContext.save() } catch { present(error); return }
+            selectedPatternID = pattern.id
+        }
+        fileImportKind = .model
+        importProgressLabel = "Importing and validating mesh..."
+        ingest(with: LocalMeshProvider(fileURL: url), into: pattern)
     }
 
     private func handleFileSelection(_ result: Result<[URL], Error>) {
