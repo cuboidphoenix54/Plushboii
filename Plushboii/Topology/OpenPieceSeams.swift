@@ -214,6 +214,18 @@ enum OpenPieceSeams {
 
     /// A verified layout for an open piece, expressed as a seam suggestion.
     static func suggestion(positions: [Vec3], triangles: [Int32], fabric: FabricProfile, visibility: SeamVisibility = .none) throws -> SeamSuggestion? {
+        // A single-boundary disc that already lies flat (a planar face) needs no cuts at all.
+        if OpenPieceSeams.boundaryLoops(triangles: triangles).count == 1, HandleSeams.genus(triangles: triangles) == 0,
+           let flat = try? TopologyEngine.flatten(positions: positions, triangles: triangles, seams: [], fabric: fabric),
+           flat.islands.count == 1, flat.islands.allSatisfy({ $0.report.passed && $0.geometryReport.areaDelta < 0.005 && $0.geometryReport.meanLocalDistortion < 0.01 }) {
+            return SeamSuggestion(
+                id: "open-flat", title: "No seams → 1 panel", seamPaths: [], panelCount: 1,
+                worstAreaDelta: flat.islands[0].geometryReport.areaDelta,
+                worstMeanLocalDistortion: flat.islands[0].geometryReport.meanLocalDistortion,
+                worstStitchLengthMismatch: 0, largestPanelAreaShare: 1, normalizedSeamLength: 0, dartCount: flat.islands[0].darts.count,
+                layoutScore: 0, rationale: "The piece is already flat, so it needs no cuts."
+            )
+        }
         guard let solution = try solve(positions: positions, triangles: triangles, fabric: fabric, visibility: visibility) else { return nil }
         let islands = solution.result.islands
         guard !islands.isEmpty, islands.allSatisfy({ $0.report.passed }) else { return nil }

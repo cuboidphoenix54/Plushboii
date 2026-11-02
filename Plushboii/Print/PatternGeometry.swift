@@ -149,24 +149,40 @@ enum PatternGeometry {
             }
         }
         let unavailable = PatternOutputError.boundaryUnavailable(segment: island.segmentIndex)
-        var next: [Int32: Int32] = [:]
+        var outgoing: [Int32: [Int32]] = [:]
+        var edgeTotal = 0
         for (edge, count) in counts {
             guard count == 1 else { throw unavailable }
             let a = Int32(truncatingIfNeeded: edge >> 32), b = Int32(truncatingIfNeeded: edge & 0xFFFF_FFFF)
-            if counts[key(b, a)] == nil {
-                guard next.updateValue(b, forKey: a) == nil else { throw unavailable }
-            }
+            if counts[key(b, a)] == nil { outgoing[a, default: []].append(b); edgeTotal += 1 }
         }
-        guard let start = next.keys.min() else { throw unavailable }
+        guard let start = outgoing.keys.min() else { throw unavailable }
 
-        var loop: [Int32] = [start]
-        var cursor = next[start]!
-        while cursor != start {
-            guard loop.count <= next.count, let following = next[cursor] else { throw unavailable }
-            loop.append(cursor)
-            cursor = following
+        // A pinched vertex (two boundary fans meeting) has several exits; the rightmost turn keeps one closed walk over every edge.
+        func choose(from previous: Int32, at vertex: Int32) -> Int32? {
+            guard let options = outgoing[vertex], !options.isEmpty else { return nil }
+            if options.count == 1 { return options[0] }
+            let incoming = island.uv[Int(vertex)] - island.uv[Int(previous)]
+            func turn(_ target: Int32) -> Double {
+                let out = island.uv[Int(target)] - island.uv[Int(vertex)]
+                return atan2(incoming.x * out.y - incoming.y * out.x, vdot(incoming, out))
+            }
+            return options.min { turn($0) < turn($1) || (turn($0) == turn($1) && $0 < $1) }
         }
-        guard loop.count == next.count else { throw unavailable }
+        var loop: [Int32] = [start]
+        var used = 0
+        guard var cursor = outgoing[start]?.min() else { throw unavailable }
+        var previous = start
+        used += 1
+        while cursor != start {
+            guard loop.count <= edgeTotal, let following = choose(from: previous, at: cursor) else { throw unavailable }
+            outgoing[previous] = outgoing[previous]?.filter { $0 != cursor }
+            loop.append(cursor)
+            previous = cursor
+            cursor = following
+            used += 1
+        }
+        guard used == edgeTotal else { throw unavailable }
 
         var signedArea = 0.0
         for i in loop.indices {

@@ -118,6 +118,22 @@ final class PatternOutputTests: XCTestCase {
         XCTAssertFalse(cutA.intersects(a.calibration))
     }
 
+    func testDXFExportIsWellFormedAndInMillimetres() throws {
+        let result = FlatteningResult(islands: [island(width: 10, height: 6)], fabric: .none)
+        let sheet = try PatternLayout.makeSheet(from: result, centimetersPerUnit: 1)
+        let dxf = PatternDXFExporter.dxf(sheet)
+        let lines = dxf.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        XCTAssertEqual(lines.last, "")
+        XCTAssertEqual(lines[lines.count - 2], "EOF")
+        XCTAssertEqual((lines.count - 1) % 2, 0)
+        for i in stride(from: 0, to: lines.count - 1, by: 2) {
+            XCTAssertNotNil(Int(lines[i].trimmingCharacters(in: .whitespaces)), "group code expected at line \(i)")
+        }
+        if let dir = ProcessInfo.processInfo.environment["PLUSHBOII_DXF_OUT"] {
+            try dxf.write(toFile: dir, atomically: true, encoding: .utf8)
+        }
+    }
+
     func testInvalidScaleAndOversizedPatternAreRejected() {
         let result = FlatteningResult(islands: [island(width: 10, height: 6)], fabric: .none)
         XCTAssertThrowsError(try PatternLayout.makeSheet(from: result, centimetersPerUnit: 0))

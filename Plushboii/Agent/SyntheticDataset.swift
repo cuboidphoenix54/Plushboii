@@ -86,8 +86,9 @@ public enum SyntheticDataset {
 
   private struct Manifest: Encodable {
     let schemaVersion = 1
-    let task = "anatomy-cuts+seam-ranking"
+    let task = "anatomy-cuts+seam-ranking+personas"
     let rankingExamples: Int
+    let personaExamples: Int
     let seed: UInt64
     let requested: Int
     let written: Int
@@ -99,7 +100,7 @@ public enum SyntheticDataset {
   }
 
   public static func generate(count: Int, seed: UInt64, outputDirectory: URL, resolution: Int = 56,
-    rankingEvery: Int = 10)
+    rankingEvery: Int = 10, personaPerTool: Int = 12)
     throws -> Summary
   {
     guard count > 0, resolution >= 24, resolution <= 128 else {
@@ -117,6 +118,8 @@ public enum SyntheticDataset {
     var rng = SplitMix64(state: seed)
     var rows: [[Data]] = []
     var rankingExamples = 0
+    var rankingAttempts = 0
+    var rankingEnabled = rankingEvery > 0
     var skipped = 0
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -145,7 +148,16 @@ public enum SyntheticDataset {
           Message(role: "assistant", content: label),
         ], images: imagePaths)
       var group = [try encoder.encode(row)]
-      if rankingEvery > 0, index % rankingEvery == 0 {
+      if rankingEnabled, index % rankingEvery == 0 {
+        rankingAttempts += 1
+        defer {
+          // Ranking costs about a minute per attempt; stop wasting hours if it never produces a row.
+          if rankingAttempts >= 6, rankingExamples == 0 {
+            rankingEnabled = false
+            FileHandle.standardError.write(
+              Data("ranking disabled: 6 attempts produced no example\n".utf8))
+          }
+        }
         do {
           group.append(try rankingRow(for: example, encoder: encoder))
           rankingExamples += 1
@@ -168,17 +180,48 @@ public enum SyntheticDataset {
       throw PlushAgentError.unreadable(
         "generation produced too few usable examples for train/validation/test splits")
     }
-    try write(lines: train, to: outputDirectory.appendingPathComponent("train.jsonl"))
+    // Persona rows are text-only and go to train only, so the cut evaluator reading valid.jsonl is unaffected.
+    var personaRows = personaPerTool > 0 ? try PersonaDataset.rows(seed: seed, geometryPerTool: personaPerTool) : []
+    // Optional pattern-PDF knowledge rows produced by Scripts/ingest_pattern_pdfs.py.
+    let patternFile = URL(fileURLWithPath: "/Volumes/AMITA/PlushboiiTraining/patterns/train.jsonl")
+    if let text = try? String(contentsOf: patternFile, encoding: .utf8) {
+      personaRows += text.split(separator: "\n").map { Data($0.utf8) }
+    }
+    // Pattern-page image rows from Scripts/ingest_pattern_images.py; images are copied beside the dataset.
+    let imageRoot = URL(fileURLWithPath: "/Volumes/AMITA/PlushboiiTraining/pattern_images")
+    if let text = try? String(contentsOf: imageRoot.appendingPathComponent("train.jsonl"), encoding: .utf8) {
+      let destination = outputDirectory.appendingPathComponent("pattern_images")
+      try? FileManager.default.removeItem(at: destination)
+      try FileManager.default.copyItem(at: imageRoot.appendingPathComponent("images"), to: destination)
+      personaRows += text.split(separator: "\n").map {
+        Data($0.replacingOccurrences(of: "[\"images/", with: "[\"pattern_images/").utf8)
+      }
+    }
+    // Real Objaverse creature meshes labelled by the pipeline (plushdata objaverse); train only.
+    let objaverseRoot = URL(fileURLWithPath: "/Volumes/AMITA/PlushboiiTraining/objaverse_rows")
+    if let text = try? String(contentsOf: objaverseRoot.appendingPathComponent("train.jsonl"), encoding: .utf8),
+      !text.isEmpty
+    {
+      let destination = outputDirectory.appendingPathComponent("objaverse")
+      try? FileManager.default.removeItem(at: destination)
+      try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+      try FileManager.default.copyItem(
+        at: objaverseRoot.appendingPathComponent("images"),
+        to: destination.appendingPathComponent("images"))
+      personaRows += text.split(separator: "\n").map { Data($0.utf8) }
+    }
+    try write(lines: train + personaRows, to: outputDirectory.appendingPathComponent("train.jsonl"))
     try write(lines: valid, to: outputDirectory.appendingPathComponent("valid.jsonl"))
     try write(lines: test, to: outputDirectory.appendingPathComponent("test.jsonl"))
     let manifest = Manifest(
       rankingExamples: rankingExamples,
+      personaExamples: personaRows.count,
       seed: seed,
       requested: count,
       written: rows.count,
       skipped: skipped,
       resolution: resolution,
-      train: train.count,
+      train: train.count + personaRows.count,
       validation: valid.count,
       test: test.count
     )
@@ -186,6 +229,80 @@ public enum SyntheticDataset {
     try manifestData.write(
       to: outputDirectory.appendingPathComponent("manifest.json"), options: .atomic)
     return Summary(written: rows.count, skipped: skipped)
+  }
+
+  /// Joints whose direction is further than this from an axis cannot be expressed as an axis-aligned cut.
+  static let minimumAxisAlignment = 0.98
+
+  /// Builds one training row from a real mesh the agent has already prepared. The label is the pipeline's own
+  /// joint plan, so this throws unless every joint maps onto an axis-aligned plane the advisor can express and
+  /// the app splitter accepts the resulting plan.
+  public static func realMeshRow(
+    preparedOBJ: URL, joints: [PlushAgentJoint], imagesDirectory: URL, imagePrefix: String
+  ) throws -> Data {
+    let imported = try OBJMeshReader.read(try Data(contentsOf: preparedOBJ))
+    let (positions, triangles) = imported.topologyInput
+    guard !positions.isEmpty else { throw PlushAgentError.unreadable("empty mesh") }
+    var cuts: [AnatomicalCut] = []
+    for joint in joints {
+      guard joint.position.count == 3, joint.direction.count == 3,
+        joint.position.allSatisfy(\.isFinite), joint.direction.allSatisfy(\.isFinite)
+      else { throw PlushAgentError.unreadable("joint has a malformed vector") }
+      let length = joint.direction.map { $0 * $0 }.reduce(0, +).squareRoot()
+      guard length > 0,
+        let index = (0..<3).max(by: { abs(joint.direction[$0]) < abs(joint.direction[$1]) }),
+        abs(joint.direction[index]) / length >= minimumAxisAlignment
+      else { throw PlushAgentError.unreadable("a joint is not axis-aligned") }
+      let axis = AnatomicalAxis.allCases[index]
+      let values = positions.map { axis.coordinate(of: $0) }
+      guard let lo = values.min(), let hi = values.max(), hi > lo else {
+        throw PlushAgentError.unreadable("mesh has no extent along \(axis.rawValue)")
+      }
+      let position = (joint.position[index] - lo) / (hi - lo)
+      guard (0.1...0.9).contains(position) else {
+        throw PlushAgentError.unreadable("a joint lies outside 0.1...0.9 of the bounds")
+      }
+      guard !joint.positiveLabel.isEmpty, !joint.negativeLabel.isEmpty else {
+        throw PlushAgentError.unreadable("a joint has no region names")
+      }
+      let positive = joint.direction[index] > 0
+      cuts.append(
+        AnatomicalCut(
+          axis: axis, normalizedPosition: (position * 1000).rounded() / 1000, boundary: joint.name,
+          negativeRegion: positive ? joint.negativeLabel : joint.positiveLabel,
+          positiveRegion: positive ? joint.positiveLabel : joint.negativeLabel, confidence: 0.9))
+    }
+    let merged = AnatomyCutPlanNormalizer.normalize(cuts)
+    guard !merged.isEmpty, merged.count <= 8 else {
+      throw PlushAgentError.unreadable("no usable joints")
+    }
+    _ = try AnatomicalMeshSplitter.split(positions: positions, triangles: triangles, cuts: merged)
+
+    let names = merged.map(\.boundary).joined(separator: ", ")
+    let plan = LabelPlan(
+      summary: String("Pipeline-proposed joints: \(names).".prefix(300)),
+      cuts: merged.map {
+        LabelCut(
+          axis: $0.axis.rawValue, normalizedPosition: $0.normalizedPosition, boundary: $0.boundary,
+          negativeRegion: $0.negativeRegion, positiveRegion: $0.positiveRegion,
+          confidence: $0.confidence)
+      })
+    let views = try AnatomyMeshViewRenderer.render(positions: positions, triangles: triangles)
+    try FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
+    var imagePaths: [String] = []
+    for (view, data) in zip(AnatomyMeshViewRenderer.View.allCases, views) {
+      try data.write(to: imagesDirectory.appendingPathComponent("\(view.rawValue).png"))
+      imagePaths.append("\(imagePrefix)/\(view.rawValue).png")
+    }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let label = String(decoding: try encoder.encode(plan), as: UTF8.self)
+    return try encoder.encode(
+      Row(
+        messages: [
+          Message(role: "user", content: OnDeviceSeamAdvisor.anatomyPrompt),
+          Message(role: "assistant", content: label),
+        ], images: imagePaths))
   }
 
   private struct RankingLabel: Encodable {

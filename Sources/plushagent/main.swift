@@ -1,7 +1,7 @@
 import Foundation
 import TopologyKit
 
-// plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--mlx] [--adapter PATH] [--height CM] [--subject auto|creature|object] [--corrections FILE] [--learn-dir DIR] [--json]
+// plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--mlx] [--adapter PATH] [--height CM] [--fabric-width CM] [--subject auto|creature|object] [--corrections FILE] [--learn-dir DIR] [--json]
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 
@@ -45,6 +45,9 @@ while !arguments.isEmpty {
     case "--stretch":
         guard arguments.count >= 2, let warp = Double(arguments[0]), let weft = Double(arguments[1]) else { fail("--stretch needs WARP and WEFT percentages") }
         arguments.removeFirst(2); options.warpStretchPercent = warp; options.weftStretchPercent = weft
+    case "--fabric-width":
+        guard let value = arguments.first.flatMap(Double.init), value > 0 else { fail("--fabric-width needs centimeters") }
+        arguments.removeFirst(); options.fabricWidthCentimeters = value
     case "--mlx":
         useMLX = true
     case "--adapter":
@@ -65,7 +68,7 @@ while !arguments.isEmpty {
     case "--json":
         wantsJSON = true
     case "-h", "--help":
-        print("usage: plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--mlx] [--adapter PATH] [--height CM] [--subject auto|creature|object] [--corrections FILE] [--learn-dir DIR] [--json]")
+        print("usage: plushagent <file.obj> [--out DIR] [--target-faces N] [--max-joints N] [--stretch WARP WEFT] [--mlx] [--adapter PATH] [--height CM] [--fabric-width CM] [--subject auto|creature|object] [--corrections FILE] [--learn-dir DIR] [--json]")
         exit(0)
     default:
         guard inputPath == nil, !argument.hasPrefix("-") else { fail("unexpected argument: \(argument)") }

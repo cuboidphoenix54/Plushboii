@@ -16,6 +16,12 @@ enum ObjectStrategy: String, Codable, Sendable {
     case gores
     /// Compact or elongated shapes such as a drill or a mug: one piece, seams placed by the solver.
     case singlePiece
+    /// Boxes, pyramids and other flat-faced solids: one panel per face.
+    case facets
+    /// Cylinders and truncated cones: a side band between two flat end caps.
+    case tube
+    /// Spheres, spheroids, capsules and other solids of revolution: identical pole-to-pole gores.
+    case meridianGores
 }
 
 struct SubjectAnalysis: Codable, Equatable, Sendable {
@@ -31,6 +37,7 @@ struct SubjectAnalysis: Codable, Equatable, Sendable {
     let baseAtHigh: Bool
     let reasons: [String]
     let forced: Bool
+    var primitive: PrimitiveFit? = nil
 }
 
 enum SubjectClassifier {
@@ -45,7 +52,8 @@ enum SubjectClassifier {
         triangles: [Int32],
         joints: [AnatomicalJoint],
         mirrorMatch: Double?,
-        override: SubjectOverride = .auto
+        override: SubjectOverride = .auto,
+        sharpPositions: [Vec3]? = nil
     ) -> SubjectAnalysis {
         var low = positions.first ?? Vec3(0, 0, 0), high = low
         for p in positions {
@@ -81,8 +89,18 @@ enum SubjectClassifier {
         let forced = override != .auto
         if forced { reasons.append("Subject forced to \(kind.rawValue) by the user (detected: \(detected.rawValue)).") }
 
-        let taper = isFlat ? nil : taperProfile(positions: positions)
-        let strategy: ObjectStrategy? = kind == .object ? (isFlat ? .frontBack : (taper != nil ? .gores : .singlePiece)) : nil
+        let primitive = kind == .object && !isFlat ? PrimitiveDetector.detect(positions: sharpPositions ?? positions, triangles: triangles) : nil
+        var taper = isFlat ? nil : taperProfile(positions: positions)
+        var strategy: ObjectStrategy? = kind == .object ? (isFlat ? .frontBack : (taper != nil ? .gores : .singlePiece)) : nil
+        if let primitive, kind == .object {
+            reasons.append(primitive.summary)
+            switch primitive.kind {
+            case .box, .pyramid, .polyhedron: strategy = .facets; taper = nil
+            case .cylinder, .frustum: strategy = .tube; taper = nil
+            case .cone, .taperedRevolve: strategy = .gores; taper = (.y, primitive.baseAtHigh)
+            case .sphere, .spheroid, .capsule, .revolve: strategy = .meridianGores; taper = nil
+            }
+        }
         if strategy == .gores { reasons.append("Tapers to an apex: base plus four leaves.") }
         return SubjectAnalysis(
             kind: kind,
@@ -95,7 +113,8 @@ enum SubjectClassifier {
             taperAxis: strategy == .gores ? taper?.axis : nil,
             baseAtHigh: taper?.baseAtHigh ?? false,
             reasons: reasons,
-            forced: forced
+            forced: forced,
+            primitive: primitive
         )
     }
 

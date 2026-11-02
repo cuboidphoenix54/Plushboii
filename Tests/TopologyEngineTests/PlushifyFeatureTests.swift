@@ -17,6 +17,26 @@ final class PlushifyFeatureTests: XCTestCase {
         return (UVIsland(segmentIndex: 0, triangles: t, uv: uv, sourceVertex: Array(0..<uv.count), darts: [], geometryReport: r, report: r, log: []), pos)
     }
 
+    func testSeamNotchSitsAtTheMiddleOfAPartneredSectionAndPointsOutward() throws {
+        let (island, _) = gridIsland(width: 1, height: 1, n: 4, uvScale: 100)
+        let loop = try PatternGeometry.boundaryIndices(of: island)
+        func uv(_ k: Int) -> Vec2 { island.uv[Int(loop[k % loop.count])] }
+        let identity: (Vec2) -> Vec2 = { $0 }
+        let sections = [SeamSection(start: 0, count: 4, partner: 1), SeamSection(start: 4, count: 3, partner: 1), SeamSection(start: 7, count: 2, partner: 0)]
+        let notches = PatternLayout.seamNotches(sections: sections, loop: loop, island: island, scale: 1, allowance: 18, move: identity)
+        XCTAssertEqual(notches.count, 2, "the self-partnered section is a dart and gets no notch")
+        let even = notches[0]
+        XCTAssertEqual(even.start.x, uv(2).x, accuracy: 1e-9)
+        XCTAssertEqual(even.start.y, uv(2).y, accuracy: 1e-9)
+        XCTAssertEqual(vlength(even.end - even.start), 18 * 0.6, accuracy: 1e-9)
+        let tangent = uv(3) - uv(1)
+        XCTAssertEqual(vdot(tangent, even.end - even.start), 0, accuracy: 1e-6)
+        let odd = notches[1]
+        let mid = (uv(5) + uv(6)) / 2
+        XCTAssertEqual(odd.start.x, mid.x, accuracy: 1e-9)
+        XCTAssertEqual(odd.start.y, mid.y, accuracy: 1e-9)
+    }
+
     func testIsometricPatchHasNoStretch() {
         let (island, pos) = gridIsland(width: 2, height: 1, uvScale: 3)
         let q = PatternQualityMap.evaluate(island: island, positions: pos)

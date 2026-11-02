@@ -139,6 +139,11 @@ enum PatternSVGExporter {
                     out += "    <text id=\"seam-\(id)-\(i)\" x=\"0\" y=\"0\" font-size=\"6\" text-anchor=\"middle\" fill=\"black\" stroke=\"none\" transform=\"translate(\(f(label.position.x)) \(f(label.position.y))) rotate(\(f(label.angle * 180 / .pi)))\">\(escape(label.text))</text>\n"
                 }
             }
+            if options.includeSeamAllowance {
+                for (i, notch) in piece.notches.enumerated() {
+                    out += "    <path id=\"notch-\(id)-\(i)\" stroke-width=\"0.75\" d=\"M \(f(notch.start.x)) \(f(notch.start.y)) L \(f(notch.end.x)) \(f(notch.end.y))\"/>\n"
+                }
+            }
             if options.includeGrain, let arrow = piece.furArrow {
                 out += "    <path id=\"grain-\(id)\" stroke-width=\"0.75\" d=\"M \(f(arrow.start.x)) \(f(arrow.start.y)) L \(f(arrow.end.x)) \(f(arrow.end.y))\"/>\n"
             }

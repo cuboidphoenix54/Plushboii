@@ -54,6 +54,12 @@ enum PatternRenderer {
             }
 
             ctx.setLineDash(phase: 0, lengths: [])
+            ctx.setLineWidth(0.75)
+            for notch in piece.notches {
+                ctx.move(to: CGPoint(x: notch.start.x, y: notch.start.y))
+                ctx.addLine(to: CGPoint(x: notch.end.x, y: notch.end.y))
+            }
+            ctx.strokePath()
             for label in piece.seamLabels {
                 drawText(label.text, at: CGPoint(x: label.position.x, y: label.position.y), size: 6, centered: true, angle: label.angle, in: ctx)
             }

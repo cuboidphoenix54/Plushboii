@@ -21,6 +21,12 @@ struct SeamLabel: Sendable, Equatable {
     let angle: Double
 }
 
+/// A short tick across the seam allowance. Both pieces sharing a seam get one at the same point along it.
+struct Notch: Sendable, Equatable {
+    let start: Vec2
+    let end: Vec2
+}
+
 struct FurArrow: Sendable, Equatable {
     let start: Vec2
     let end: Vec2
@@ -63,6 +69,7 @@ struct PlacedPiece: Sendable {
     /// How many of those copies are cut as the mirror image.
     var mirroredCopies = 0
     var seamLabels: [SeamLabel] = []
+    var notches: [Notch] = []
     var furArrow: FurArrow?
     var details: [PlacedDetail] = []
     /// Sewing instructions (darts, gathers, eases) printed under the caption.
@@ -79,6 +86,8 @@ struct LayoutOptions: Sendable {
     /// Print congruent pieces once, with the number of copies noted.
     var deduplicateCongruent = false
     var labelSeams = false
+    /// Mark one matching notch at the middle of every seam shared with another piece.
+    var markNotches = false
     /// Distance between sewing line and cutting line, in points.
     var seamAllowancePoints = PatternUnits.seamAllowancePoints
     /// Print dart apexes and join notes (ease, gather) on each piece.
@@ -121,7 +130,7 @@ enum PatternLayout {
             let rep = representative[island]
             return options.names[rep] ?? "Piece \(result.islands[rep].segmentIndex + 1)"
         }
-        let sections = options.labelSeams ? SeamSections.sections(for: result) : []
+        let sections = (options.labelSeams || options.markNotches) ? SeamSections.sections(for: result) : []
         let sewingNotes = options.includeSewingNotes
             ? SewingGuide.notes(for: result, centimetersPerUnit: centimetersPerUnit)
             : []
@@ -201,6 +210,13 @@ enum PatternLayout {
                         piece.dartApexes = guide.darts.map { move($0.apexUV * scale) }
                     }
 
+                    if options.markNotches, island.segmentIndex < sections.count,
+                       let loop = try? PatternGeometry.boundaryIndices(of: island) {
+                        piece.notches = seamNotches(
+                            sections: sections[island.segmentIndex], loop: loop, island: island,
+                            scale: scale, allowance: options.seamAllowancePoints, move: move
+                        )
+                    }
                     if options.labelSeams, island.segmentIndex < sections.count,
                        let loop = try? PatternGeometry.boundaryIndices(of: island) {
                         piece.seamLabels = seamLabels(
@@ -233,6 +249,45 @@ enum PatternLayout {
             }
         }
         throw PatternOutputError.doesNotFitA0
+    }
+
+    /// One notch at the topological middle of each long seam section shared with another piece. The middle
+    /// vertex (even edge count) or middle edge (odd count) is the same on both pieces whatever their distortion.
+    static func seamNotches(
+        sections: [SeamSection],
+        loop: [Int32],
+        island: UVIsland,
+        scale: Double,
+        allowance: Double,
+        move: (Vec2) -> Vec2
+    ) -> [Notch] {
+        let minimumLength = 40.0
+        let n = loop.count
+        guard n >= 3 else { return [] }
+        func point(_ k: Int) -> Vec2 { island.uv[Int(loop[((k % n) + n) % n])] * scale }
+        var notches: [Notch] = []
+        for section in sections {
+            guard let partner = section.partner, partner != island.segmentIndex else { continue }
+            var length = 0.0
+            for k in section.start..<(section.start + section.count) { length += vlength(point(k + 1) - point(k)) }
+            guard length >= minimumLength else { continue }
+
+            let middle = section.start + section.count / 2
+            let base: Vec2, tangent: Vec2
+            if section.count % 2 == 0 {
+                base = point(middle)
+                tangent = point(middle + 1) - point(middle - 1)
+            } else {
+                base = (point(middle) + point(middle + 1)) / 2
+                tangent = point(middle + 1) - point(middle)
+            }
+            let span = vlength(tangent)
+            guard span > 1e-9 else { continue }
+            let unitTangent = tangent / span
+            let outward = Vec2(unitTangent.y, -unitTangent.x)
+            notches.append(Notch(start: move(base), end: move(base + outward * (allowance * 0.6))))
+        }
+        return notches
     }
 
     /// One label per sufficiently long seam section, centered in the seam allowance of that section's middle edge.

@@ -78,7 +78,7 @@ if [ "$STATUS" = "WAITING_FOR_ADAPTER3" ]; then
     else
         printf 'GENERATING_DATASET\n' > "$STATUS_FILE"
         log "Generating a versioned 2,000-candidate anatomy4 corpus with geometry-backed labels."
-        swift run --package-path "$REPOSITORY" plushdata "$OUTPUT" --count 2000 --seed 420
+        nice -n 10 "$REPOSITORY/.build/release/plushdata" "$OUTPUT" --count 2000 --seed 420
     fi
 fi
 

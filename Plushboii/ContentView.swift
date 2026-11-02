@@ -1032,6 +1032,7 @@ struct ContentView: View {
                 .help("Fabric width in centimeters")
             Button("Fabric Needed") { calculateFabric() }
             Button("Export SVG") { saveSVG() }
+            Button("Export DXF") { saveDXF() }
             Menu("Save Pattern PDF") {
                 Button("US Letter tiled PDF") {
                     savePatternPDF(.tiled)
@@ -1614,6 +1615,7 @@ struct ContentView: View {
         var options = LayoutOptions()
         options.deduplicateCongruent = dedupeCongruent
         options.labelSeams = labelSeams
+        options.markNotches = labelSeams
         options.seamAllowancePoints = seamAllowance.points
         options.includeSewingNotes = true
         options.furDirectionDegrees = showFurArrows ? 90 : nil
@@ -1658,6 +1660,26 @@ struct ContentView: View {
                 panel.nameFieldStringValue = "Plushboii-Pattern.svg"
                 if panel.runModal() == .OK, let url = panel.url {
                     try svg.write(to: url, atomically: true, encoding: .utf8)
+                }
+            } catch {
+                present(error)
+            }
+        }
+    }
+
+    private func saveDXF() {
+        guard let result = flattening, let scale = centimetersPerMeshUnitValue else { return }
+        let options = layoutOptions
+        Task {
+            do {
+                let dxf = try await offMainActor {
+                    PatternDXFExporter.dxf(try PatternLayout.makeSheet(from: result, centimetersPerUnit: scale, options: options))
+                }
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [UTType(filenameExtension: "dxf") ?? .data]
+                panel.nameFieldStringValue = "Plushboii-Pattern.dxf"
+                if panel.runModal() == .OK, let url = panel.url {
+                    try dxf.write(to: url, atomically: true, encoding: .utf8)
                 }
             } catch {
                 present(error)

@@ -67,9 +67,10 @@ extension PlushAgent {
 
     /// Combines every piece's panels into one sheet at the requested plush height.
     private static func exportPattern(
-        report: PlushAgentReport, summary: String, cuts cutLines: [String], prepared preparedPositions: [Vec3],
+        report inputReport: PlushAgentReport, summary: String, cuts cutLines: [String], prepared preparedPositions: [Vec3],
         directory: URL, options: PlushAgentOptions, plushHeightCentimeters: Double
     ) async throws -> PlushAgentMLXResult {
+        var report = inputReport
         let fabric: FabricProfile
         if let maximumDarts = options.rigidMaximumDarts {
             fabric = .rigid(maxDarts: maximumDarts)
@@ -111,8 +112,9 @@ extension PlushAgent {
             layout.includeSewingNotes = false
             let sheet = try PatternLayout.makeSheet(from: FlatteningResult(islands: islands, fabric: fabric), centimetersPerUnit: scale, options: layout)
             try Data(PatternSVGExporter.svg(sheet).utf8).write(to: directory.appendingPathComponent("pattern.svg"))
+            try Data(PatternDXFExporter.dxf(sheet).utf8).write(to: directory.appendingPathComponent("pattern.dxf"))
             try await PatternPDFExporter.a0PDF(sheet).write(to: directory.appendingPathComponent("pattern_a0.pdf"))
-            files = ["pattern.svg", "pattern_a0.pdf"]
+            files = ["pattern.svg", "pattern.dxf", "pattern_a0.pdf"]
         }
         return PlushAgentMLXResult(report: report, summary: summary, cuts: cutLines, patternFiles: files)
     }

@@ -83,7 +83,9 @@ enum TopologyEngine {
                     return split
                 }
                 // A panel that stays badly stretched is cut again when that clearly lowers the stretch.
-                if refine, splitDepth < 3, fabric == .none,
+                // Rigid fabric cannot absorb that stretch; stretch fabrics are skipped because their
+                // negative ease shrinks the island on purpose, which would read as false stretch.
+                if refine, splitDepth < 3, fabric == .none || fabric.isRigid,
                    let before = meanStretch([island], reference: current), before > stretchSplitThreshold,
                    let split = try? adaptiveSplit(
                     current, index: index, fabric: fabric, tolerance: tolerance,
@@ -302,6 +304,19 @@ enum TopologyEngine {
             if report.passed, report.flippedTriangles <= geometryReport.flippedTriangles {
                 uv = relaxed
                 geometryReport = report
+            }
+            // SLIM then evens out stretch and compression (symmetric Dirichlet energy) without allowing flips.
+            let smoothed = SLIMRefiner.refine(patch: patch, initialUV: uv)
+            if let before = SLIMRefiner.meanExcessEnergy(patch: patch, uv: uv),
+               let after = SLIMRefiner.meanExcessEnergy(patch: patch, uv: smoothed), after < before {
+                let slimReport = DistortionVerifier.verify(
+                    positions: patch.positions, triangles: patch.triangles, uv: smoothed,
+                    areaFactor: 1, tolerance: tolerance, requireLocalAccuracy: fabric.isRigid
+                )
+                if slimReport.passed, slimReport.flippedTriangles <= geometryReport.flippedTriangles {
+                    uv = smoothed
+                    geometryReport = slimReport
+                }
             }
         }
         let matrix = fabric.scalingMatrix

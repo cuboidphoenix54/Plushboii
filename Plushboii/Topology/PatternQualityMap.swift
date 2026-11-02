@@ -120,7 +120,7 @@ enum PatternQualityMap {
 }
 
 extension UVIsland {
-    fileprivate func sourcePosition(_ local: Int, _ positions: [Vec3]) -> Vec3 {
+    func sourcePosition(_ local: Int, _ positions: [Vec3]) -> Vec3 {
         positions[sourceVertex[local]]
     }
 }

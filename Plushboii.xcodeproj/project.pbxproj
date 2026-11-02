@@ -49,10 +49,17 @@
 		A10000000000000000000097 /* JointProposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000097 /* JointProposer.swift */; };
 		A100000000000000000000C1 /* SubjectClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C1 /* SubjectClassifier.swift */; };
 		A100000000000000000000E2 /* SeamVisibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E2 /* SeamVisibility.swift */; };
+		A100000000000000000000E4 /* PrimitiveDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E4 /* PrimitiveDetector.swift */; };
+		A100000000000000000000E5 /* PrimitiveSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000E5 /* PrimitiveSplitter.swift */; };
 		A100000000000000000000C2 /* HandleSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C2 /* HandleSeams.swift */; };
 		A100000000000000000000C3 /* MeshSimplifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000000000000000000C3 /* MeshSimplifier.swift */; };
 		A10000000000000000000094 /* MeshRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000094 /* MeshRepair.swift */; };
 		A10000000000000000000098 /* ARAPRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000098 /* ARAPRefiner.swift */; };
+		A1000000000000000000F0 /* PatternDXFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000F0 /* PatternDXFExporter.swift */; };
+		A1000000000000000000E6 /* SLIMRefiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000E6 /* SLIMRefiner.swift */; };
+		A1000000000000000000E7 /* FabricProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000E7 /* FabricProperties.swift */; };
+		A1000000000000000000E8 /* StuffingSimulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000E8 /* StuffingSimulator.swift */; };
+		A1000000000000000000E9 /* FabricNesting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000E9 /* FabricNesting.swift */; };
 		A10000000000000000000099 /* MeshSmoothing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000099 /* MeshSmoothing.swift */; };
 		A10000000000000000000093 /* PatternExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000093 /* PatternExtras.swift */; };
 		A10000000000000000000092 /* ModelPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000092 /* ModelPreparation.swift */; };
@@ -118,10 +125,17 @@
 		A20000000000000000000097 /* JointProposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointProposer.swift; sourceTree = "<group>"; };
 		A200000000000000000000C1 /* SubjectClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectClassifier.swift; sourceTree = "<group>"; };
 		A200000000000000000000E2 /* SeamVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeamVisibility.swift; sourceTree = "<group>"; };
+		A200000000000000000000E4 /* PrimitiveDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimitiveDetector.swift; sourceTree = "<group>"; };
+		A200000000000000000000E5 /* PrimitiveSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimitiveSplitter.swift; sourceTree = "<group>"; };
 		A200000000000000000000C2 /* HandleSeams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleSeams.swift; sourceTree = "<group>"; };
 		A200000000000000000000C3 /* MeshSimplifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Agent/MeshSimplifier.swift; sourceTree = "<group>"; };
 		A20000000000000000000094 /* MeshRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshRepair.swift; sourceTree = "<group>"; };
 		A20000000000000000000098 /* ARAPRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARAPRefiner.swift; sourceTree = "<group>"; };
+		A2000000000000000000F0 /* PatternDXFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternDXFExporter.swift; sourceTree = "<group>"; };
+		A2000000000000000000E6 /* SLIMRefiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SLIMRefiner.swift; sourceTree = "<group>"; };
+		A2000000000000000000E7 /* FabricProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FabricProperties.swift; sourceTree = "<group>"; };
+		A2000000000000000000E8 /* StuffingSimulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StuffingSimulator.swift; sourceTree = "<group>"; };
+		A2000000000000000000E9 /* FabricNesting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FabricNesting.swift; sourceTree = "<group>"; };
 		A20000000000000000000099 /* MeshSmoothing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshSmoothing.swift; sourceTree = "<group>"; };
 		A20000000000000000000092 /* ModelPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreparation.swift; sourceTree = "<group>"; };
 		A20000000000000000000091 /* PieceCongruence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceCongruence.swift; sourceTree = "<group>"; };
@@ -213,10 +227,16 @@
 				A20000000000000000000054 /* AreaPreservingUVRefiner.swift */,
 				A20000000000000000000094 /* MeshRepair.swift */,
 				A20000000000000000000098 /* ARAPRefiner.swift */,
+				A2000000000000000000E6 /* SLIMRefiner.swift */,
+				A2000000000000000000E7 /* FabricProperties.swift */,
+				A2000000000000000000E8 /* StuffingSimulator.swift */,
+				A2000000000000000000E9 /* FabricNesting.swift */,
 				A20000000000000000000099 /* MeshSmoothing.swift */,
 				A20000000000000000000097 /* JointProposer.swift */,
 				A200000000000000000000C1 /* SubjectClassifier.swift */,
 				A200000000000000000000E2 /* SeamVisibility.swift */,
+				A200000000000000000000E4 /* PrimitiveDetector.swift */,
+				A200000000000000000000E5 /* PrimitiveSplitter.swift */,
 				A200000000000000000000C2 /* HandleSeams.swift */,
 				A20000000000000000000096 /* StagedAnatomySplit.swift */,
 				A20000000000000000000095 /* OpenPieceSeams.swift */,
@@ -238,6 +258,7 @@
 				A200000000000000000000B1 /* SewingGuide.swift */,
 				A200000000000000000000B2 /* PanelGallery.swift */,
 				A20000000000000000000093 /* PatternExtras.swift */,
+				A2000000000000000000F0 /* PatternDXFExporter.swift */,
 				A20000000000000000000031 /* PatternLayout.swift */,
 				A20000000000000000000032 /* PatternRenderer.swift */,
 				A20000000000000000000033 /* PatternPDFExporter.swift */,
@@ -377,10 +398,17 @@
 				A10000000000000000000053 /* AreaPreservingUVRefiner.swift in Sources */,
 				A10000000000000000000094 /* MeshRepair.swift in Sources */,
 				A10000000000000000000098 /* ARAPRefiner.swift in Sources */,
+				A1000000000000000000F0 /* PatternDXFExporter.swift in Sources */,
+				A1000000000000000000E6 /* SLIMRefiner.swift in Sources */,
+				A1000000000000000000E7 /* FabricProperties.swift in Sources */,
+				A1000000000000000000E8 /* StuffingSimulator.swift in Sources */,
+				A1000000000000000000E9 /* FabricNesting.swift in Sources */,
 				A10000000000000000000099 /* MeshSmoothing.swift in Sources */,
 				A10000000000000000000097 /* JointProposer.swift in Sources */,
 				A100000000000000000000C1 /* SubjectClassifier.swift in Sources */,
 				A100000000000000000000E2 /* SeamVisibility.swift in Sources */,
+				A100000000000000000000E4 /* PrimitiveDetector.swift in Sources */,
+				A100000000000000000000E5 /* PrimitiveSplitter.swift in Sources */,
 				A100000000000000000000C2 /* HandleSeams.swift in Sources */,
 				A100000000000000000000C3 /* MeshSimplifier.swift in Sources */,
 				A10000000000000000000096 /* StagedAnatomySplit.swift in Sources */,

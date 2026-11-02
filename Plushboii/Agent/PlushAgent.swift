@@ -12,6 +12,8 @@ public struct PlushAgentOptions: Sendable {
     public var weftStretchPercent: Double?
     /// Maximum dart count used when solving rigid-fabric pieces. Nil keeps the geometry-only profile.
     public var rigidMaximumDarts: Int?
+    /// Usable fabric width used to estimate yardage, in centimeters.
+    public var fabricWidthCentimeters: Double = 112
     /// Seam allowance for pattern files, in points (1/72 inch).
     public var seamAllowancePoints: Double = 18
     /// Skip seam solving on pieces above this many faces to keep runs bounded.
@@ -33,6 +35,9 @@ public struct PlushAgentOptions: Sendable {
 
     /// Forces creature or object handling; `.auto` classifies from the geometry.
     public var subject: SubjectOverride = .auto
+
+    /// Stops right after subject classification when the mesh is not a creature (dataset building).
+    public var creaturesOnly = false
 
     /// Sections an object is divided into along its longest axis; nil lets the agent choose and escalate.
     var objectSlabs: Int?
@@ -123,8 +128,8 @@ public enum PlushAgent {
 
     public static func run(input url: URL, options: PlushAgentOptions = PlushAgentOptions()) throws -> PlushAgentReport {
         var best = try runPass(input: url, options: options)
-        guard best.subjectKind == SubjectKind.object.rawValue, options.objectSlabs == nil,
-              !best.steps.contains(where: { $0.hasPrefix("Tapered") || $0.hasPrefix("Flat object") }) else { return best }
+        guard best.subjectKind == SubjectKind.object.rawValue, options.objectSlabs == nil, !options.creaturesOnly,
+              !best.steps.contains(where: { $0.hasPrefix("Tapered") || $0.hasPrefix("Flat object") || $0.hasPrefix("Primitive") }) else { return best }
         // A single object surface rarely flattens within tolerance; divide it into more sections until every piece verifies.
         for slabs in [3, 4, 6, 8, 12] where slabs > best.objectSlabs && best.verdict != "ready" {
             var retry = options
@@ -176,6 +181,8 @@ public enum PlushAgent {
         }
 
         // Lumps in a scanned or generated surface are noise for a sewing pattern.
+        // Smoothing rounds off the edges and caps that identify a primitive, so keep the crisp mesh for detection.
+        var sharpPositions = positions
         if options.smoothingIterations > 0 {
             positions = MeshSmoothing.taubin(positions: positions, triangles: triangles, iterations: options.smoothingIterations)
             report.steps.append("Smoothed surface lumpiness (\(options.smoothingIterations) Taubin iterations).")
@@ -184,6 +191,7 @@ public enum PlushAgent {
         // 3. Orientation: rest on the steadiest face.
         if let best = ModelPreparation.orientationCandidates(positions: positions).first {
             positions = ModelPreparation.oriented(positions, up: best.up)
+            sharpPositions = ModelPreparation.oriented(sharpPositions, up: best.up)
             report.orientationUp = [best.up.x, best.up.y, best.up.z]
             report.orientationStable = best.centerOfMassSupported
             report.steps.append("Oriented with \(describe(best.up)) up (\(best.centerOfMassSupported ? "stable" : "center of mass unsupported")).")
@@ -213,12 +221,17 @@ public enum PlushAgent {
             PlushAgentJoint(name: $0.name, position: [$0.position.x, $0.position.y, $0.position.z], direction: [$0.direction.x, $0.direction.y, $0.direction.z], positiveLabel: $0.positiveLabel, negativeLabel: $0.negativeLabel)
         }
         let subject = SubjectClassifier.classify(
-            positions: positions, triangles: triangles, joints: joints, mirrorMatch: report.mirrorMatch, override: options.subject
+            positions: positions, triangles: triangles, joints: joints, mirrorMatch: report.mirrorMatch, override: options.subject, sharpPositions: sharpPositions
         )
+        if subject.primitive != nil, subject.kind == .object { positions = sharpPositions }
         report.subjectKind = subject.kind.rawValue
         report.subjectScore = subject.creatureScore
         report.subjectReasons = subject.reasons
         report.steps.append("Subject: \(subject.kind.rawValue) (creature score \(String(format: "%.2f", subject.creatureScore))).")
+        if options.creaturesOnly, subject.kind != .creature {
+            report.verdict = "skipped"
+            return report
+        }
         var components: [MeshComponent]
         if subject.kind == .object {
             // Objects need far less detail than a character; coarser meshes flatten and solve much faster.
@@ -232,7 +245,23 @@ public enum PlushAgent {
             let slabs = subject.strategy == .frontBack || subject.strategy == .gores ? 2 : (options.objectSlabs ?? (HandleSeams.genus(triangles: triangles) > 0 ? 3 : 1))
             report.objectSlabs = slabs
             do {
-                if subject.strategy == .gores, let axis = subject.taperAxis {
+                if let fit = subject.primitive, let axis = fit.axis, [.gores, .tube, .meridianGores].contains(subject.strategy) {
+                    positions = PrimitiveDetector.align(positions, axis: axis, center: fit.center)
+                }
+                if let fit = subject.primitive, subject.strategy == .facets {
+                    components = PrimitiveSplitter.facetComponents(positions: positions, triangles: triangles)
+                    report.objectSlabs = 1
+                    report.steps.append("Primitive: \(fit.summary) [fit \(Int(fit.confidence * 100))%] One panel per face (\(components.count)); sew the faces together edge to edge, mirroring opposite faces.")
+                } else if let fit = subject.primitive, subject.strategy == .tube {
+                    components = PrimitiveSplitter.tubeComponents(positions: positions, triangles: triangles, axis: Vec3(0, 1, 0), center: fit.center)
+                    report.objectSlabs = 1
+                    report.steps.append("Primitive: \(fit.summary) [fit \(Int(fit.confidence * 100))%] Side band plus \(components.count - 1) end cap(s); sew the band into a ring, then set in the caps.")
+                } else if let fit = subject.primitive, subject.strategy == .meridianGores {
+                    let gores = 6
+                    components = PrimitiveSplitter.meridianGoreComponents(positions: positions, triangles: triangles, axis: Vec3(0, 1, 0), center: fit.center, count: gores)
+                    report.objectSlabs = 1
+                    report.steps.append("Primitive: \(fit.summary) [fit \(Int(fit.confidence * 100))%] \(gores) identical gores from pole to pole; sew them together along the meridians.")
+                } else if subject.strategy == .gores, let axis = subject.taperAxis {
                     components = try SubjectClassifier.goreComponents(positions: positions, triangles: triangles, axis: axis, baseAtHigh: subject.baseAtHigh)
                     report.objectSlabs = 1
                     report.steps.append("Tapered object: circular base plus \(components.count - 1) leaves meeting at the apex; sew the leaves together, then set in the base.")
@@ -303,6 +332,10 @@ public enum PlushAgent {
         }
         let totalArea = max(components.reduce(0) { $0 + $1.surfaceArea }, 1e-12)
         var failures = 0, softIssues = 0
+        var allIslands: [(UVIsland, String)] = []
+        let fabricProperties = FabricProperties.inferred(from: fabric)
+        var strains: [AnisotropicStrain.Report] = []
+        var flatGroups: [(islands: [UVIsland], sourceVertices: [Int]?)] = []
         for component in components {
             let label = component.anatomicalLabel ?? "piece \(component.id + 1)"
             let openings = OpenPieceSeams.boundaryLoops(triangles: component.triangles).count
@@ -311,7 +344,10 @@ public enum PlushAgent {
                 issue = "Too large to solve (\(component.triangleCount) faces)."
             } else {
                 do {
-                    if let best = try SeamSuggestionEngine.suggest(positions: component.positions, triangles: component.triangles, fabric: fabric, maximumSuggestions: 1, visibility: seamVisibility.bound(to: positions)).first {
+                    let boundVisibility = seamVisibility.bound(to: positions)
+                    let primitiveBest = subject.strategy == .tube && component.anatomicalLabel == "Side band"
+                        ? PrimitiveSeams.tubeBandSuggestion(positions: component.positions, triangles: component.triangles, fabric: fabric, visibility: boundVisibility) : nil
+                    if let best = try primitiveBest ?? SeamSuggestionEngine.suggest(positions: component.positions, triangles: component.triangles, fabric: fabric, maximumSuggestions: 1, visibility: boundVisibility).first {
                         seams = best.seamPaths.map { path in path.map { component.sourceVertices[$0] } }
                         if let dir = options.outputDirectory, options.anatomyCuts != nil || subject.kind == .object {
                             try JSONEncoder().encode(best.seamPaths).write(to: dir.appendingPathComponent("piece_\(component.id + 1)_seams.json"))
@@ -323,10 +359,12 @@ public enum PlushAgent {
                         if let flat = try? TopologyEngine.flatten(positions: component.positions, triangles: component.triangles, seams: best.seamPaths, fabric: fabric) {
                             audited = max(audited, StitchAudit.audit(flat.islands).worstMismatch)
                             panels = flat.islands.count
-                            let groups = PieceCongruence.groups(for: flat)
-                            let u = SeamRules.uniformity(groups, pieceCount: flat.islands.count)
-                            report.construction.append(String(format: "%@: %d panel(s), %.0f%% in identical/mirrored sets.", label, flat.islands.count, u * 100))
-                            report.construction += SeamRules.cuttingNotes(groups: groups) { "\(label) panel \($0 + 1)" }
+                            report.construction.append("\(label): \(flat.islands.count) panel(s).")
+                            allIslands += flat.islands.map { ($0, label) }
+                            flatGroups.append((flat.islands, component.sourceVertices))
+                            strains += flat.islands.map {
+                                AnisotropicStrain.analyze(island: $0, positions: component.positions, properties: fabricProperties, grainAngle: fabric.grainAngle)
+                            }
                         }
                         stitch = audited
                         rationale = best.rationale
@@ -353,6 +391,31 @@ public enum PlushAgent {
                 seamPaths: seams, panelCount: panels, worstAreaDelta: areaDelta,
                 worstStitchLengthMismatch: stitch, rationale: rationale, issue: issue, advisory: advisory, file: file
             ))
+        }
+        if !allIslands.isEmpty {
+            let groups = PieceCongruence.groups(islands: allIslands.map(\.0))
+            let u = SeamRules.uniformity(groups, pieceCount: allIslands.count)
+            report.construction.append(String(format: "Whole pattern: %d panel(s), %.0f%% in identical/mirrored sets.", allIslands.count, u * 100))
+            report.construction += SeamRules.cuttingNotes(groups: groups) { "\(allIslands[$0].1) panel \($0 + 1)" }
+        }
+        if !strains.isEmpty {
+            let warp = strains.map(\.worstWarpStretch).max() ?? 0, weft = strains.map(\.worstWeftStretch).max() ?? 0
+            let shear = strains.map(\.worstShearDegrees).max() ?? 0
+            report.construction.append(String(format: "Fabric strain (%@): most stretched point needs %+.1f%% along the warp and %+.1f%% along the weft; worst bias shear %.1f°.", fabricProperties.name, warp * 100, weft * 100, shear))
+            let strained = strains.filter { !$0.passed }.count
+            if strained > 0 {
+                report.warnings.append("\(strained) panel(s) ask more stretch or shear than \(fabricProperties.name) allows. Add a seam or dart there, or use a stretchier fabric.")
+            }
+        }
+        if !flatGroups.isEmpty, flatGroups.count == components.count, triangles.count / 3 <= 12_000 {
+            var stuffing = StuffingSimulator.Options()
+            stuffing.properties = fabricProperties
+            let lengths = StuffingSimulator.restLengths(from: flatGroups)
+            if let sim = try? StuffingSimulator.simulate(positions: positions, triangles: triangles, restLengths: lengths, options: stuffing) {
+                report.construction.append(String(format: "Stuffing preview: holds %.0f%% of the target volume; seam-edge strain mean %+.1f%%, max %+.1f%%; shape off by %.1f%% of the plush's size.", sim.volumeRatio * 100, sim.meanEdgeStrain * 100, sim.maxEdgeStrain * 100, sim.shapeDeviation * 100))
+                if sim.volumeRatio < 0.95 { report.warnings.append(String(format: "The pattern can only hold %.0f%% of the target stuffing volume; it will look under-filled or wrinkled.", sim.volumeRatio * 100)) }
+                if sim.exceedsFabric { report.warnings.append("Stuffing would stretch some seams past what the fabric allows; add ease there or stuff less firmly.") }
+            }
         }
         if failures > 0 { report.warnings.append("\(failures) of \(components.count) piece(s) need attention.") }
         if softIssues > 0 { report.warnings.append("\(softIssues) piece(s) flatten within tolerance but have mismatched stitch edges.") }

@@ -20,18 +20,23 @@ enum PieceCongruence {
     /// Groups islands in index order; every island belongs to exactly one group. Islands whose outline
     /// cannot be extracted stay alone.
     static func groups(for result: FlatteningResult, tolerance: Double = 0.03) -> [Group] {
+        groups(islands: result.islands, tolerance: tolerance)
+    }
+
+    /// Same grouping over islands gathered from several pieces, so identical panels in different pieces (the faces of a box) pair up.
+    static func groups(islands: [UVIsland], tolerance: Double = 0.03) -> [Group] {
         struct Signature {
             let profile: [Double]
             let area: Double
             let perimeter: Double
         }
-        let signatures: [Signature?] = result.islands.map { island in
+        let signatures: [Signature?] = islands.map { island in
             guard let loop = try? PatternGeometry.boundaryLoop(of: island), let sampled = resample(loop, count: sampleCount) else { return nil }
             return Signature(profile: sampled.profile, area: sampled.area, perimeter: sampled.perimeter)
         }
 
         var groups: [(representative: Int, members: [Member])] = []
-        for index in result.islands.indices {
+        for index in islands.indices {
             guard let signature = signatures[index] else {
                 groups.append((index, [Member(island: index, mirrored: false)]))
                 continue
