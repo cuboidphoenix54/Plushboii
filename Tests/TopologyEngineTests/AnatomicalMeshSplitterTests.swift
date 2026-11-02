@@ -3,7 +3,7 @@ import ImageIO
 @testable import TopologyKit
 
 final class AnatomicalMeshSplitterTests: XCTestCase {
-    func testOllamaAnatomySchemaRequiresRegisteredPlaneAndRegionLabels() throws {
+    func testAnatomySchemaRequiresRegisteredPlaneAndRegionLabels() throws {
         let encoded = try JSONEncoder().encode(AnatomyJSONSchema())
         let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])

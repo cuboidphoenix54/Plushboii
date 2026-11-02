@@ -250,3 +250,63 @@ enum DetailPlacement {
         return result(Vec3(1 - v - w, v, w))
     }
 }
+
+/// Sewing rules applied when ranking seam layouts: uniform, mirrored pieces, straight seams that are easy to sew
+/// and hide, and outlines that turn right-side out cleanly.
+enum SeamRules {
+    /// Corners sharper than this (radians of turning) are hard to turn and stuff cleanly.
+    static let sharpCornerTurning = 2.2
+
+    /// Path length over end-to-end chord: 1 for a straight seam; wiggly seams are visible and hard to sew.
+    static func tortuosity(path: [Int], positions: [Vec3]) -> Double {
+        guard path.count >= 2, let first = path.first, let last = path.last else { return 1 }
+        let length = zip(path, path.dropFirst()).reduce(0.0) { $0 + vlength(positions[$1.1] - positions[$1.0]) }
+        let chord = vlength(positions[last] - positions[first])
+        // A closed ring (girth seam) has no chord; judge it against a circle of the same length instead.
+        if chord < 1e-9 { return 1 }
+        return max(1, length / chord)
+    }
+
+    /// Fraction of pieces that have at least one identical or mirrored partner.
+    static func uniformity(_ groups: [PieceCongruence.Group], pieceCount: Int) -> Double {
+        guard pieceCount > 0 else { return 1 }
+        return Double(groups.filter { $0.copies > 1 }.reduce(0) { $0 + $1.copies }) / Double(pieceCount)
+    }
+
+    /// Penalty for outline corners too sharp to turn, and for concave runs that need many clips.
+    static func turnabilityPenalty(of island: UVIsland) -> Double {
+        guard let loop = try? PatternGeometry.boundaryLoop(of: island), loop.count >= 3 else { return 0 }
+        let n = loop.count
+        var area2 = 0.0
+        for i in 0..<n { let a = loop[i], b = loop[(i + 1) % n]; area2 += a.x * b.y - b.x * a.y }
+        let winding = area2 >= 0 ? 1.0 : -1.0
+        var sharp = 0, concave = 0.0
+        for i in 0..<n {
+            let a = loop[(i + n - 1) % n], b = loop[i], c = loop[(i + 1) % n]
+            let u = b - a, v = c - b
+            guard vlength(u) > 1e-12, vlength(v) > 1e-12 else { continue }
+            let turn = atan2(u.x * v.y - u.y * v.x, u.x * v.x + u.y * v.y) * winding
+            if abs(turn) > sharpCornerTurning { sharp += 1 }
+            if turn < 0 { concave -= turn }
+        }
+        return 0.05 * Double(sharp) + 0.05 * concave / .pi
+    }
+
+    /// Cutting instructions: how many of each piece, and which to flip so right sides face the right way.
+    static func cuttingNotes(groups: [PieceCongruence.Group], label: (Int) -> String) -> [String] {
+        groups.compactMap { group in
+            guard group.copies > 1 else { return nil }
+            let mirrored = group.mirroredCopies, same = group.copies - mirrored
+            let name = label(group.representative)
+            if mirrored == 0 { return "Cut \(group.copies) × \(name): identical pieces; cut on the same fabric side." }
+            return "Cut \(same) × \(name) and \(mirrored) mirrored (flip the pattern, or cut layers right sides together) so every pair has a left and a right."
+        }
+    }
+
+    static let generalRules: [String] = [
+        "Sew with right sides together so seams end up inside the stuffed shell; mark the right side on every piece before cutting.",
+        "Leave a 5 cm turning opening in the straightest, least visible seam (usually along the underside or back); close it with a ladder stitch.",
+        "Match grain and pile direction across mirrored pieces so the pile runs the same way over the finished plush.",
+        "Prefer seams along natural creases (under arms, centre back, belly); keep them off the face and other high-detail areas."
+    ]
+}

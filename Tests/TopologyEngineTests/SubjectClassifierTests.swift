@@ -85,4 +85,17 @@ final class GoreSplitTests: XCTestCase {
         XCTAssertEqual(pieces.filter { $0.anatomicalLabel?.contains("mirrored") == true }.count, 2)
         XCTAssertEqual(pieces.filter { $0.anatomicalLabel?.contains("longer") == true }.count, 2)
     }
+
+    func testLongerLeafPairIsLongerByComputedDifferential() throws {
+        let mesh = cone()
+        let d = try XCTUnwrap(SubjectClassifier.goreDifferential(positions: mesh.positions, axis: .y, baseAtHigh: false))
+        XCTAssertGreaterThanOrEqual(d.extraLength / d.meridianLength, SubjectClassifier.goreStuffingFloor - 1e-9)
+        XCTAssertLessThanOrEqual(d.extraLength / d.meridianLength, SubjectClassifier.goreMaximumExtra + 1e-9)
+        let pieces = try SubjectClassifier.goreComponents(positions: mesh.positions, triangles: mesh.triangles, axis: .y, baseAtHigh: false)
+        func height(_ label: String) -> Double {
+            let ys = pieces.filter { $0.anatomicalLabel?.contains(label) == true }.flatMap { $0.positions.map(\.y) }
+            return (ys.max() ?? 0) - (ys.min() ?? 0)
+        }
+        XCTAssertGreaterThan(height("longer"), height("mirrored"))
+    }
 }

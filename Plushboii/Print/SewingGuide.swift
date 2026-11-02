@@ -51,6 +51,49 @@ enum SeamAllowanceOption: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
+enum FabricStretch: String, CaseIterable, Sendable {
+    case woven
+    case stretchKnit
+
+    var toleranceScale: Double { self == .stretchKnit ? 1.5 : 1 }
+}
+
+/// Seam-allowance geometry on a curved edge: offsetting a convex curve outward by `a` lengthens it by `a * turning`
+/// (arc length scales with radius), so convex edges need notches to lie flat once turned; concave edges shorten by the
+/// same amount and need clips.
+struct AllowanceCurvature: Sendable, Equatable {
+    /// Total turning (radians) of convex and concave corners along the closed outline, measured against its winding.
+    let convexTurning: Double
+    let concaveTurning: Double
+
+    func excessCentimeters(allowanceCentimeters a: Double) -> Double { convexTurning * a }
+
+    /// One notch or clip per 15 degrees of turning keeps each wedge under about 1 mm at a 6 mm allowance.
+    static let degreesPerCut = 15.0
+    var notchCount: Int { Int((convexTurning * 180 / .pi / Self.degreesPerCut - 1e-9).rounded(.up)) }
+    var clipCount: Int { Int((concaveTurning * 180 / .pi / Self.degreesPerCut - 1e-9).rounded(.up)) }
+
+    static func measure(outline: [Vec2]) -> AllowanceCurvature {
+        let n = outline.count
+        guard n >= 3 else { return AllowanceCurvature(convexTurning: 0, concaveTurning: 0) }
+        var area2 = 0.0
+        for i in 0..<n {
+            let a = outline[i], b = outline[(i + 1) % n]
+            area2 += a.x * b.y - b.x * a.y
+        }
+        let winding = area2 >= 0 ? 1.0 : -1.0
+        var convex = 0.0, concave = 0.0
+        for i in 0..<n {
+            let a = outline[(i + n - 1) % n], b = outline[i], c = outline[(i + 1) % n]
+            let u = b - a, v = c - b
+            guard vlength(u) > 1e-12, vlength(v) > 1e-12 else { continue }
+            let turn = atan2(u.x * v.y - u.y * v.x, u.x * v.x + u.y * v.y) * winding
+            if turn >= 0 { convex += turn } else { concave -= turn }
+        }
+        return AllowanceCurvature(convexTurning: convex, concaveTurning: concave)
+    }
+}
+
 enum JoinTechnique: String, Sendable, Equatable {
     case match = "Match edges"
     case ease = "Ease"
@@ -69,11 +112,13 @@ struct JoinNote: Sendable, Equatable {
     let isLongerSide: Bool
     let technique: JoinTechnique
 
-    /// Thresholds: up to 3% matches, up to 10% eases, up to 30% gathers, anything beyond is flagged for a re-cut.
-    static func technique(forMismatch mismatch: Double) -> JoinTechnique {
-        if mismatch <= 0.03 { return .match }
-        if mismatch <= 0.10 { return .ease }
-        if mismatch <= 0.30 { return .gather }
+    /// Woven: up to 3% matches, 10% eases, 30% gathers. Stretch knits (Minky, fleece) absorb about 1.5x more per step
+    /// because the fabric itself gives 30-50%. Anything beyond is flagged for a re-cut.
+    static func technique(forMismatch mismatch: Double, fabric: FabricStretch = .woven) -> JoinTechnique {
+        let k = fabric.toleranceScale
+        if mismatch <= 0.03 * k { return .match }
+        if mismatch <= 0.10 * k { return .ease }
+        if mismatch <= 0.30 * k { return .gather }
         return .recut
     }
 }
@@ -90,6 +135,7 @@ struct DartNote: Sendable, Equatable {
 struct PieceSewingNotes: Sendable, Equatable {
     var joins: [JoinNote] = []
     var darts: [DartNote] = []
+    var curvature = AllowanceCurvature(convexTurning: 0, concaveTurning: 0)
 
     var summaryLines: [String] {
         var lines: [String] = darts.enumerated().map { index, dart in
@@ -99,13 +145,16 @@ struct PieceSewingNotes: Sendable, Equatable {
             let verb = join.isLongerSide ? "\(join.technique.rawValue) this edge" : "Partner edge is longer"
             lines.append(String(format: "%@ (+%.0f%%) with piece %d", verb, join.mismatch * 100, join.partner + 1))
         }
+        if curvature.notchCount > 0 || curvature.clipCount > 0 {
+            lines.append("Seam allowance: notch ~\(curvature.notchCount) convex, clip ~\(curvature.clipCount) concave")
+        }
         return lines
     }
 }
 
 enum SewingGuide {
     /// Per-island notes in island order. Partners are island indices, as in `SeamSections`.
-    static func notes(for result: FlatteningResult, centimetersPerUnit: Double) -> [PieceSewingNotes] {
+    static func notes(for result: FlatteningResult, centimetersPerUnit: Double, fabric: FabricStretch = .woven) -> [PieceSewingNotes] {
         guard centimetersPerUnit.isFinite, centimetersPerUnit > 0 else {
             return result.islands.map { _ in PieceSewingNotes() }
         }
@@ -142,10 +191,13 @@ enum SewingGuide {
                     partnerLengthCentimeters: theirs,
                     mismatch: mismatch,
                     isLongerSide: mine >= theirs,
-                    technique: JoinNote.technique(forMismatch: mismatch)
+                    technique: JoinNote.technique(forMismatch: mismatch, fabric: fabric)
                 ))
             }
             let island = result.islands[index]
+            if let loop = loops[index] {
+                notes.curvature = AllowanceCurvature.measure(outline: loop.map { island.uv[Int($0)] })
+            }
             for dart in island.darts {
                 guard let apex = island.sourceVertex.firstIndex(of: dart.apexVertex) else { continue }
                 notes.darts.append(DartNote(

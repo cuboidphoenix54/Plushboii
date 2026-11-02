@@ -142,6 +142,64 @@ enum SubjectClassifier {
         return nil
     }
 
+    struct GoreDifferential: Sendable, Equatable {
+        let meridianLength: Double
+        let turningAngle: Double
+        let meanRadius: Double
+        let maxRadius: Double
+        let extraLength: Double
+        var factor: Double { meridianLength > 0 ? 1 + extraLength / meridianLength : 1 }
+    }
+
+    /// Gore width W = C / n at the fullest circumference C = 2 pi r. Four panels is only adequate when each is narrow;
+    /// guidance is 6-8 gores for a smooth dome, so n grows until W is within one-sixth of the radius spread.
+    static func goreGuidance(maxRadius: Double, currentCount: Int = 4) -> (widthAtCurrent: Double, recommendedCount: Int, widthAtRecommended: Double) {
+        let c = 2 * Double.pi * max(maxRadius, 0)
+        let recommended = maxRadius > 0 ? min(8, max(currentCount, 6)) : currentCount
+        return (c / Double(max(currentCount, 1)), recommended, c / Double(max(recommended, 1)))
+    }
+
+    static let goreStuffingFloor = 0.02
+    static let goreMaximumExtra = 0.12
+
+    /// Differential panel logic: the outer-fibre of a curved profile is longer than the inner by (turning angle x offset).
+    /// The profile r(z) is sampled in bins; its arc length L and total turning angle theta come from segment headings.
+    /// The longer pair sits half a mean radius off the neutral axis, so extra = theta * r / 2, clamped to a 2% stuffing
+    /// take-up floor and a 12% ceiling that gathering/easing can still absorb.
+    static func goreDifferential(positions: [Vec3], axis: AnatomicalAxis, baseAtHigh: Bool) -> GoreDifferential? {
+        guard positions.count > 8 else { return nil }
+        let coords = positions.map { axis.coordinate(of: $0) }
+        guard let lo = coords.min(), let hi = coords.max(), hi > lo else { return nil }
+        let others = AnatomicalAxis.allCases.filter { $0 != axis }
+        let centre = positions.reduce(Vec3(0, 0, 0), +) / Double(positions.count)
+        let bins = 12
+        var sum = [Double](repeating: 0, count: bins), count = [Int](repeating: 0, count: bins)
+        for (i, p) in positions.enumerated() {
+            let b = min(bins - 1, Int((coords[i] - lo) / (hi - lo) * Double(bins)))
+            let d = others.map { $0.coordinate(of: p) - $0.coordinate(of: centre) }
+            sum[b] += (d[0] * d[0] + d[1] * d[1]).squareRoot(); count[b] += 1
+        }
+        var profile: [(z: Double, r: Double)] = []
+        for b in 0..<bins where count[b] > 0 {
+            profile.append((lo + (hi - lo) * (Double(b) + 0.5) / Double(bins), sum[b] / Double(count[b])))
+        }
+        if baseAtHigh { profile.reverse() }
+        guard profile.count >= 3 else { return nil }
+        var length = 0.0, turning = 0.0, previousHeading: Double?
+        for (a, b) in zip(profile, profile.dropFirst()) {
+            let dz = abs(b.z - a.z), dr = b.r - a.r
+            length += (dz * dz + dr * dr).squareRoot()
+            let heading = atan2(dr, dz)
+            if let previous = previousHeading { turning += abs(heading - previous) }
+            previousHeading = heading
+        }
+        guard length > 0 else { return nil }
+        let meanRadius = profile.map(\.r).reduce(0, +) / Double(profile.count)
+        let raw = turning * meanRadius / 2
+        let extra = min(max(raw, length * goreStuffingFloor), length * goreMaximumExtra)
+        return GoreDifferential(meridianLength: length, turningAngle: turning, meanRadius: meanRadius, maxRadius: profile.map(\.r).max() ?? meanRadius, extraLength: extra)
+    }
+
     /// Circular base plus four leaves. Leaves are named around the axis: the first adjacent pair is one mirrored
     /// pair and the second adjacent pair is the slightly longer pair.
     static func goreComponents(positions: [Vec3], triangles: [Int32], axis: AnatomicalAxis, baseAtHigh: Bool) throws -> [MeshComponent] {
@@ -170,15 +228,28 @@ enum SubjectClassifier {
             return atan2(others[1].coordinate(of: c) - others[1].coordinate(of: centre), others[0].coordinate(of: c) - others[0].coordinate(of: centre))
         }
         let ordered = leaves.sorted { angle($0) < angle($1) }
+        let differential = goreDifferential(positions: body.positions, axis: axis, baseAtHigh: baseAtHigh)
+        func lengthened(_ leaf: MeshComponent) -> [Vec3] {
+            guard let factor = differential?.factor else { return leaf.positions }
+            return leaf.positions.map { p in
+                let c = axis.coordinate(of: p)
+                return p + axisVector(axis) * ((c - plane) * (factor - 1))
+            }
+        }
         var result: [MeshComponent] = []
         for part in baseParts {
             result.append(MeshComponent(id: 0, positions: part.positions, triangles: part.triangles, sourceVertices: part.sourceVertices, anatomicalLabel: "Base"))
         }
         for (i, leaf) in ordered.enumerated() {
             let label = ordered.count == 4 ? (i < 2 ? "Leaf A\(i + 1) (mirrored pair)" : "Leaf B\(i - 1) (longer pair)") : "Leaf \(i + 1)"
-            result.append(MeshComponent(id: 0, positions: leaf.positions, triangles: leaf.triangles, sourceVertices: leaf.sourceVertices.map { $0 >= 0 ? body.sourceVertices[$0] : -1 }, anatomicalLabel: label))
+            let isLonger = ordered.count == 4 && i >= 2
+            result.append(MeshComponent(id: 0, positions: isLonger ? lengthened(leaf) : leaf.positions, triangles: leaf.triangles, sourceVertices: leaf.sourceVertices.map { $0 >= 0 ? body.sourceVertices[$0] : -1 }, anatomicalLabel: label))
         }
         return result.enumerated().map { MeshComponent(id: $0.offset, positions: $0.element.positions, triangles: $0.element.triangles, sourceVertices: $0.element.sourceVertices, anatomicalLabel: $0.element.anatomicalLabel) }
+    }
+
+    private static func axisVector(_ axis: AnatomicalAxis) -> Vec3 {
+        switch axis { case .x: return Vec3(1, 0, 0); case .y: return Vec3(0, 1, 0); case .z: return Vec3(0, 0, 1) }
     }
 
     /// Divides a mesh into `count` sections along its longest axis, peeling one off the low end at a time.

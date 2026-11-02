@@ -102,7 +102,8 @@ enum OpenPieceSeams {
         positions: [Vec3],
         triangles: [Int32],
         fabric: FabricProfile,
-        maximumChords: Int = 10
+        maximumChords: Int = 10,
+        visibility: SeamVisibility = .none
     ) throws -> Solution? {
         let handleSeams = HandleSeams.seams(positions: positions, triangles: triangles)
         guard !boundaryLoops(triangles: triangles).isEmpty || !handleSeams.isEmpty else { return nil }
@@ -123,7 +124,10 @@ enum OpenPieceSeams {
         func worst(_ candidate: [[Int]]) -> Double {
             guard let loose = try? TopologyEngine.flatten(positions: positions, triangles: triangles, seams: candidate, fabric: fabric, tolerance: 100, refine: false) else { return .infinity }
             let distortion = loose.islands.map { $0.report.areaDelta + ($0.report.flippedTriangles > 0 ? 1 : 0) }.max() ?? .infinity
-            return distortion + 0.5 * min(stitchMismatch(islands: loose.islands, seams: candidate), 2)
+            let uniformity = SeamRules.uniformity(PieceCongruence.groups(for: loose), pieceCount: loose.islands.count)
+            let sewing = (loose.islands.count > 1 ? 0.25 * (1 - uniformity) : 0)
+                + SeamVisibility.weightInSeamScore * visibility.penalty(of: candidate, positions: positions)
+            return distortion + 0.5 * min(stitchMismatch(islands: loose.islands, seams: candidate), 2) + sewing
         }
 
         var bestPetals: [[Int]] = []
@@ -209,8 +213,8 @@ enum OpenPieceSeams {
     }
 
     /// A verified layout for an open piece, expressed as a seam suggestion.
-    static func suggestion(positions: [Vec3], triangles: [Int32], fabric: FabricProfile) throws -> SeamSuggestion? {
-        guard let solution = try solve(positions: positions, triangles: triangles, fabric: fabric) else { return nil }
+    static func suggestion(positions: [Vec3], triangles: [Int32], fabric: FabricProfile, visibility: SeamVisibility = .none) throws -> SeamSuggestion? {
+        guard let solution = try solve(positions: positions, triangles: triangles, fabric: fabric, visibility: visibility) else { return nil }
         let islands = solution.result.islands
         guard !islands.isEmpty, islands.allSatisfy({ $0.report.passed }) else { return nil }
         let mismatch = stitchMismatch(islands: islands, seams: solution.seams)

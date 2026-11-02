@@ -24,6 +24,13 @@ public struct PlushAgentOptions: Sendable {
     /// Axis-aligned anatomical cuts (from the MLX model) used instead of joint proposals when set.
     var anatomyCuts: [AnatomicalCut]?
 
+    /// JSON file with the user's corrections to the MLX anatomy plan (replacement cuts and/or visible regions).
+    public var correctionsFile: URL?
+    /// When set with corrections that replace the cuts, a fine-tuning example is saved here for the next MLX training run.
+    public var learnDirectory: URL?
+    /// Regions where seams would be conspicuous (derived from face labels and corrections).
+    var visibility: SeamVisibility = .none
+
     /// Forces creature or object handling; `.auto` classifies from the geometry.
     public var subject: SubjectOverride = .auto
 
@@ -74,6 +81,7 @@ public struct PlushAgentReport: Codable, Sendable {
     public var subjectScore = 0.0
     public var subjectReasons: [String] = []
     public var objectSlabs = 1
+    public var construction: [String] = []
     public var pieces: [PlushAgentPiece] = []
     public var preparedMeshFile: String?
     public var steps: [String] = []
@@ -98,6 +106,21 @@ public enum PlushAgentError: LocalizedError {
 }
 
 public enum PlushAgent {
+    /// The model is treated as a hollow fabric shell: the surface shape is preserved, the source pose is not.
+    static func constructionNotes(kind: SubjectKind, components: [MeshComponent]) -> [String] {
+        var notes = [
+            "Hollow fabric shell stuffed with polyfill; the surface shape is preserved, the source pose is not.",
+            "Each piece is flattened from its own surface, so pose, limb bend and orientation do not change the pattern."
+        ]
+        notes.append("Finishing: notch convex seam allowances and clip concave ones; mark quarter-point notches on long curved seams; sew a muslin toile before cutting pile fabric.")
+        notes.append("Stuffing inflates the shell and softens sharp detail; use lightweight fusible interfacing on stretch knits (Minky) to hold the drafted proportions.")
+        if kind == .creature, components.count > 1 {
+            let limbs = components.compactMap(\.anatomicalLabel).filter { !$0.isEmpty && $0 != "body" && $0 != "torso" }
+            notes.append("Teddy-bear articulation: sew limbs and head as separate stuffed pieces and attach them to the body at the cut openings (\(limbs.count) attachment(s)), so they can be posed freely.")
+        }
+        return notes
+    }
+
     public static func run(input url: URL, options: PlushAgentOptions = PlushAgentOptions()) throws -> PlushAgentReport {
         var best = try runPass(input: url, options: options)
         guard best.subjectKind == SubjectKind.object.rawValue, options.objectSlabs == nil,
@@ -164,7 +187,7 @@ public enum PlushAgent {
             report.orientationUp = [best.up.x, best.up.y, best.up.z]
             report.orientationStable = best.centerOfMassSupported
             report.steps.append("Oriented with \(describe(best.up)) up (\(best.centerOfMassSupported ? "stable" : "center of mass unsupported")).")
-            if !best.centerOfMassSupported { report.warnings.append("No axis gives a stable resting pose; check orientation manually.") }
+            // Plush pose is irrelevant: the stuffed result is rebuilt in a neutral pose, so an unstable scan pose is not a defect.
         }
 
         // 4. Symmetry.
@@ -213,6 +236,13 @@ public enum PlushAgent {
                     components = try SubjectClassifier.goreComponents(positions: positions, triangles: triangles, axis: axis, baseAtHigh: subject.baseAtHigh)
                     report.objectSlabs = 1
                     report.steps.append("Tapered object: circular base plus \(components.count - 1) leaves meeting at the apex; sew the leaves together, then set in the base.")
+                    let guide = SubjectClassifier.goreGuidance(maxRadius: SubjectClassifier.goreDifferential(positions: positions, axis: axis, baseAtHigh: subject.baseAtHigh)?.maxRadius ?? 0, currentCount: max(components.count - 1, 1))
+                    if guide.recommendedCount > components.count - 1 {
+                        report.steps.append(String(format: "Gore width is %.2f units at the fullest point with %d leaves; %d gores (%.2f wide each) give a smoother stuffed dome. Re-cut with more gores for a rounder result.", guide.widthAtCurrent, components.count - 1, guide.recommendedCount, guide.widthAtRecommended))
+                    }
+                    if components.count == 5, let d = SubjectClassifier.goreDifferential(positions: positions, axis: axis, baseAtHigh: subject.baseAtHigh) {
+                        report.steps.append(String(format: "Longer leaf pair (B) drafted %.1f%% longer (+%.2f units on a %.2f meridian; profile turns %.0f°). Pin B to A at quarter points and ease the difference evenly (no tucks) when sewing.", d.extraLength / d.meridianLength * 100, d.extraLength, d.meridianLength, d.turningAngle * 180 / .pi))
+                    }
                 } else if let cuts = SubjectClassifier.objectCuts(for: subject) {
                     components = try AnatomicalMeshSplitter.split(positions: positions, triangles: triangles, cuts: cuts)
                     report.steps.append("Flat object: split into front/back shells; sew them together around the rim.")
@@ -250,6 +280,18 @@ public enum PlushAgent {
             }
         }
 
+        var seamVisibility = options.visibility
+        if let file = options.correctionsFile, let correction = try? AnatomyCorrection.load(file) {
+            seamVisibility.regions += (correction.visibleRegions ?? []).filter { !seamVisibility.regions.contains($0) }
+        }
+        report.construction = constructionNotes(kind: subject.kind, components: components) + SeamRules.generalRules
+        if report.steps.contains(where: { $0.hasPrefix("Tapered") }) {
+            report.construction.append("Teardrop/cone: mating seams between leaves must be equal length. Make the longer pair longer through a fuller curve profile, not a longer joining edge.")
+        }
+        if report.steps.contains(where: { $0.hasPrefix("Flat object") }) {
+            report.construction.append("Flat-faced shapes bulge when stuffed: interface the flat panels or add a rigid insert, and use a gusset strip if you want a straight side wall.")
+        }
+
         // 6. Per-piece cut assessment and seam suggestion.
         let fabric: FabricProfile
         if let maximumDarts = options.rigidMaximumDarts {
@@ -269,7 +311,7 @@ public enum PlushAgent {
                 issue = "Too large to solve (\(component.triangleCount) faces)."
             } else {
                 do {
-                    if let best = try SeamSuggestionEngine.suggest(positions: component.positions, triangles: component.triangles, fabric: fabric, maximumSuggestions: 1).first {
+                    if let best = try SeamSuggestionEngine.suggest(positions: component.positions, triangles: component.triangles, fabric: fabric, maximumSuggestions: 1, visibility: seamVisibility.bound(to: positions)).first {
                         seams = best.seamPaths.map { path in path.map { component.sourceVertices[$0] } }
                         if let dir = options.outputDirectory, options.anatomyCuts != nil || subject.kind == .object {
                             try JSONEncoder().encode(best.seamPaths).write(to: dir.appendingPathComponent("piece_\(component.id + 1)_seams.json"))
@@ -281,6 +323,10 @@ public enum PlushAgent {
                         if let flat = try? TopologyEngine.flatten(positions: component.positions, triangles: component.triangles, seams: best.seamPaths, fabric: fabric) {
                             audited = max(audited, StitchAudit.audit(flat.islands).worstMismatch)
                             panels = flat.islands.count
+                            let groups = PieceCongruence.groups(for: flat)
+                            let u = SeamRules.uniformity(groups, pieceCount: flat.islands.count)
+                            report.construction.append(String(format: "%@: %d panel(s), %.0f%% in identical/mirrored sets.", label, flat.islands.count, u * 100))
+                            report.construction += SeamRules.cuttingNotes(groups: groups) { "\(label) panel \($0 + 1)" }
                         }
                         stitch = audited
                         rationale = best.rationale

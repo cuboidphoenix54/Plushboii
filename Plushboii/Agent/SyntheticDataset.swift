@@ -86,7 +86,8 @@ public enum SyntheticDataset {
 
   private struct Manifest: Encodable {
     let schemaVersion = 1
-    let task = "anatomy-cuts"
+    let task = "anatomy-cuts+seam-ranking"
+    let rankingExamples: Int
     let seed: UInt64
     let requested: Int
     let written: Int
@@ -97,7 +98,8 @@ public enum SyntheticDataset {
     let test: Int
   }
 
-  public static func generate(count: Int, seed: UInt64, outputDirectory: URL, resolution: Int = 56)
+  public static func generate(count: Int, seed: UInt64, outputDirectory: URL, resolution: Int = 56,
+    rankingEvery: Int = 10)
     throws -> Summary
   {
     guard count > 0, resolution >= 24, resolution <= 128 else {
@@ -113,7 +115,8 @@ public enum SyntheticDataset {
     }
     try fm.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
     var rng = SplitMix64(state: seed)
-    var rows: [Data] = []
+    var rows: [[Data]] = []
+    var rankingExamples = 0
     var skipped = 0
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -141,15 +144,25 @@ public enum SyntheticDataset {
           Message(role: "user", content: OnDeviceSeamAdvisor.anatomyPrompt),
           Message(role: "assistant", content: label),
         ], images: imagePaths)
-      rows.append(try encoder.encode(row))
+      var group = [try encoder.encode(row)]
+      if rankingEvery > 0, index % rankingEvery == 0 {
+        do {
+          group.append(try rankingRow(for: example, encoder: encoder))
+          rankingExamples += 1
+        } catch {
+          FileHandle.standardError.write(
+            Data("creature \(index): no ranking example (\(error.localizedDescription))\n".utf8))
+        }
+      }
+      rows.append(group)
       try label.write(
         to: directory.appendingPathComponent("label.json"), atomically: true, encoding: .utf8)
     }
 
     // Keep each independently generated source geometry in exactly one split.
-    let test = rows.enumerated().filter { $0.offset % 10 == 0 }.map(\.element)
-    let valid = rows.enumerated().filter { $0.offset % 10 == 9 }.map(\.element)
-    let train = rows.enumerated().filter { $0.offset % 10 != 0 && $0.offset % 10 != 9 }.map(
+    let test = rows.enumerated().filter { $0.offset % 10 == 0 }.flatMap(\.element)
+    let valid = rows.enumerated().filter { $0.offset % 10 == 9 }.flatMap(\.element)
+    let train = rows.enumerated().filter { $0.offset % 10 != 0 && $0.offset % 10 != 9 }.flatMap(
       \.element)
     guard !train.isEmpty, !valid.isEmpty, !test.isEmpty else {
       throw PlushAgentError.unreadable(
@@ -159,6 +172,7 @@ public enum SyntheticDataset {
     try write(lines: valid, to: outputDirectory.appendingPathComponent("valid.jsonl"))
     try write(lines: test, to: outputDirectory.appendingPathComponent("test.jsonl"))
     let manifest = Manifest(
+      rankingExamples: rankingExamples,
       seed: seed,
       requested: count,
       written: rows.count,
@@ -172,6 +186,43 @@ public enum SyntheticDataset {
     try manifestData.write(
       to: outputDirectory.appendingPathComponent("manifest.json"), options: .atomic)
     return Summary(written: rows.count, skipped: skipped)
+  }
+
+  private struct RankingLabel: Encodable {
+    let visualSummary = "Not available: no reference image was provided."
+    let bodyConstruction = "Not available: no reference image was provided."
+    let visibleComponents: [String] = []
+    let candidateIDs: [String]
+  }
+
+  /// Text-only seam-ranking example. The label is the app's own verified layout order (lowest `layoutScore`
+  /// first); candidates are shown in shuffled order so the model must read the measurements, not the position.
+  private static func rankingRow(
+    for example: (positions: [Vec3], triangles: [Int32], plan: LabelPlan),
+    encoder: JSONEncoder
+  ) throws -> Data {
+    let suggestions = try SeamSuggestionEngine.suggest(
+      positions: example.positions, triangles: example.triangles)
+    guard suggestions.count >= 2 else {
+      throw PlushAgentError.unreadable("too few verified layouts to rank")
+    }
+    var order = SplitMix64(state: UInt64(truncatingIfNeeded: example.triangles.count) &* 0x9E37_79B9)
+    var shown = suggestions
+    shown.shuffle(using: &order)
+    let best = suggestions.sorted {
+      $0.layoutScore == $1.layoutScore ? $0.id < $1.id : $0.layoutScore < $1.layoutScore
+    }
+    let prompt = OnDeviceSeamAdvisor.rankingPrompt(
+      candidates: shown, domain: .plushie, vertexCount: example.positions.count,
+      faceCount: example.triangles.count / 3, hasImage: false)
+    let label = String(
+      decoding: try encoder.encode(RankingLabel(candidateIDs: best.map(\.id))), as: UTF8.self)
+    return try encoder.encode(
+      Row(
+        messages: [
+          Message(role: "user", content: prompt),
+          Message(role: "assistant", content: label),
+        ], images: []))
   }
 
   private static func write(lines: [Data], to url: URL) throws {

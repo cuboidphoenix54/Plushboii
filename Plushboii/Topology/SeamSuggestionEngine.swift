@@ -56,7 +56,8 @@ enum SeamSuggestionEngine {
         positions: [Vec3],
         triangles: [Int32],
         fabric: FabricProfile = .none,
-        maximumSuggestions: Int = 3
+        maximumSuggestions: Int = 3,
+        visibility: SeamVisibility = .none
     ) throws -> [SeamSuggestion] {
         guard positions.count >= 3, triangles.count >= 3, triangles.count.isMultiple(of: 3),
               positions.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }),
@@ -68,7 +69,7 @@ enum SeamSuggestionEngine {
         try fabric.validated()
 
         if !OpenPieceSeams.boundaryLoops(triangles: triangles).isEmpty || HandleSeams.genus(triangles: triangles) > 0 {
-            guard let suggestion = try OpenPieceSeams.suggestion(positions: positions, triangles: triangles, fabric: fabric) else { return [] }
+            guard let suggestion = try OpenPieceSeams.suggestion(positions: positions, triangles: triangles, fabric: fabric, visibility: visibility) else { return [] }
             return [suggestion]
         }
 
@@ -148,7 +149,14 @@ enum SeamSuggestionEngine {
                 continue
             }
 
-            let score = 4 * worstAreaDelta
+            // Sewing rules: prefer uniform/mirrored pieces, straight seams, and outlines that turn cleanly.
+            let uniformity = SeamRules.uniformity(PieceCongruence.groups(for: flattened), pieceCount: islands.count)
+            let wiggle = paths.map { SeamRules.tortuosity(path: $0, positions: positions) }.max().map { $0 - 1 } ?? 0
+            let turnability = islands.map(SeamRules.turnabilityPenalty).reduce(0, +) / Double(islands.count)
+            let sewingPenalty = (islands.count > 1 ? 0.25 * (1 - uniformity) : 0) + 0.15 * min(wiggle, 2) + turnability
+                + SeamVisibility.weightInSeamScore * visibility.penalty(of: paths, positions: positions)
+            let score = sewingPenalty
+                + 4 * worstAreaDelta
                 + worstLocal
                 + 1.5 * worstStitchMismatch
                 + 0.5 * largestAreaShare

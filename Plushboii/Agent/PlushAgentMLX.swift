@@ -42,15 +42,27 @@ extension PlushAgent {
         }
         let plan = try await OnDeviceSeamAdvisor.suggestAnatomy(views: views, model: advisorModel ?? OnDeviceSeamAdvisor.mlxModelName)
 
+        let correction = try options.correctionsFile.map(AnatomyCorrection.load)
+        var finalCuts = plan.cuts
+        var summary = plan.summary
+        if let replacement = correction?.replacementCuts {
+            finalCuts = replacement
+            summary = correction?.summary ?? "User-corrected anatomy."
+            if let learn = options.learnDirectory {
+                let name = try AnatomyCorrectionStore.record(views: views, summary: summary, cuts: replacement, to: learn)
+                print("  learn: saved correction \(name) to \(learn.path)/corrections.jsonl")
+            }
+        }
         var second = options
-        second.anatomyCuts = plan.cuts
+        second.anatomyCuts = finalCuts
+        second.visibility = SeamVisibility(regions: SeamVisibility.derived(from: finalCuts) + (correction?.visibleRegions ?? []))
         // Pass 2 re-runs the identical preparation, then cuts at the MLX planes.
         let report = try run(input: url, options: second)
-        let cutLines = plan.cuts.map {
+        let cutLines = finalCuts.map {
             String(format: "%@ @ %.2f: %@ | %@ (%@, conf %.2f)", "\($0.axis)", $0.normalizedPosition, $0.negativeRegion, $0.positiveRegion, $0.boundary, $0.confidence)
         }
 
-        return try await exportPattern(report: report, summary: plan.summary, cuts: cutLines, prepared: prepared.positions, directory: directory, options: options, plushHeightCentimeters: plushHeightCentimeters)
+        return try await exportPattern(report: report, summary: summary, cuts: cutLines, prepared: prepared.positions, directory: directory, options: options, plushHeightCentimeters: plushHeightCentimeters)
     }
 
     /// Combines every piece's panels into one sheet at the requested plush height.

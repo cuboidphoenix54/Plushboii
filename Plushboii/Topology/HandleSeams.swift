@@ -6,6 +6,7 @@ import Foundation
 enum HandleSeams {
     /// Genus of a connected manifold piece, from V - E + F and its boundary-loop count.
     static func genus(triangles: [Int32]) -> Int {
+        guard triangles.count >= 3 else { return 0 }
         var vertices = Set<Int32>(), edges = Set<UInt64>()
         for t in stride(from: 0, to: triangles.count, by: 3) {
             for k in 0..<3 {

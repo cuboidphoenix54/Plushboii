@@ -211,13 +211,15 @@ struct ContentView: View {
     @State private var aiPipelineOutputURL: URL?
     @State private var isAnalyzingAnatomy = false
     @State private var anatomyPreviewToken = 0
+    @State private var anatomyViews: [Data] = []
+    @State private var correctionPlan: AnatomicalCutPlan?
     @State private var isSuggestingSeams = false
-    @State private var ollamaModels: [String] = []
-    @State private var ollamaModel = ""
-    @State private var ollamaStatus: String?
-    @State private var isLoadingOllamaModels = false
+    @State private var mlxModels: [String] = []
+    @State private var mlxModel = ""
+    @State private var mlxStatus: String?
+    @State private var isLoadingMLXModels = false
     @State private var isShowingLocalModelSettings = false
-    @State private var isShowingTrainingDashboard = false
+    @Environment(\.openWindow) private var openWindow
     @State private var referenceImageForPiece: (pieceID: UUID, url: URL)?
     @State private var previewSeamSuggestionID: String?
     @State private var showError = false
@@ -283,9 +285,6 @@ struct ContentView: View {
         .sheet(isPresented: $isShowingLocalModelSettings) {
             LocalModelSettingsView()
         }
-        .sheet(isPresented: $isShowingTrainingDashboard) {
-            TrainingDashboardView()
-        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: createPattern) {
@@ -296,7 +295,15 @@ struct ContentView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Button {
-                    isShowingTrainingDashboard = true
+                    openWindow(id: "plush-assistants")
+                } label: {
+                    Label("Assistants", systemImage: "pawprint.fill")
+                }
+                .help("Ask Hiro, Luna or Oden")
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    openWindow(id: "training-dashboard")
                 } label: {
                     Label("Training", systemImage: "chart.xyaxis.line")
                 }
@@ -320,6 +327,18 @@ struct ContentView: View {
                 present(error)
             }
         }
+        .sheet(item: Binding(
+            get: { correctionPlan.map { CorrectionToken(plan: $0) } },
+            set: { if $0 == nil { correctionPlan = nil } }
+        )) { token in
+            AnatomyCorrectionSheet(
+                plan: token.plan,
+                canLearn: !anatomyViews.isEmpty,
+                onPreview: { await previewCorrectedCuts($0) },
+                onSaveForLearning: { await saveCorrection(cuts: $0, notes: $1) },
+                onClose: { correctionPlan = nil }
+            )
+        }
         .alert("Operation Failed", isPresented: $showError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -341,6 +360,9 @@ struct ContentView: View {
             titleVisibility: .visible
         ) {
             if let pendingAnatomicalSplit {
+                if !pendingAnatomicalSplit.plan.cuts.isEmpty {
+                    Button("Correct Cuts…") { correctionPlan = pendingAnatomicalSplit.plan }
+                }
                 Button("Create \(pendingAnatomicalSplit.components.count) Anatomy Pieces") {
                     createPieces(
                         from: pendingAnatomicalSplit.components,
@@ -399,7 +421,7 @@ struct ContentView: View {
         previewSeamSuggestionID = nil
         seamAdviceStatus = nil
         }
-        .onAppear { Task { await refreshOllamaModels() } }
+        .onAppear { Task { await refreshMLXModels() } }
         .task(id: meshToken) {
             await seamEditor.load(piece: selectedPiece)
             seamSuggestions = []
@@ -588,18 +610,18 @@ struct ContentView: View {
                     SecureField("Meshy API key", text: $apiKey)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 360)
-                    Picker("Local model", selection: $ollamaModel) {
+                    Picker("Local model", selection: $mlxModel) {
                         Text("Select local model").tag("")
-                        ForEach(ollamaModels, id: \.self) { model in
+                        ForEach(mlxModels, id: \.self) { model in
                             Text(model).tag(model)
                         }
                     }
                     .frame(maxWidth: 230)
-                    .help("Select the MLX anatomy model or a vision-capable model installed in Ollama.")
-                    Button(isLoadingOllamaModels ? "Checking…" : "Refresh Models") {
-                        Task { await refreshOllamaModels() }
+                    .help("Select the local MLX model.")
+                    Button(isLoadingMLXModels ? "Checking…" : "Refresh Models") {
+                        Task { await refreshMLXModels() }
                     }
-                    .disabled(isLoadingOllamaModels)
+                    .disabled(isLoadingMLXModels)
                     Button("AI Settings", systemImage: "slider.horizontal.3") {
                         isShowingLocalModelSettings = true
                     }
@@ -613,8 +635,8 @@ struct ContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let ollamaStatus {
-                        Text(ollamaStatus)
+                    if let mlxStatus {
+                        Text(mlxStatus)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -758,7 +780,7 @@ struct ContentView: View {
                     .disabled(
                         seamEditor.mesh == nil || isAnalyzingAnatomy || isSuggestingSeams
                             || isFlattening || seamEditor.isBusy || !seamEditor.seams.isEmpty
-                            || ollamaModel.isEmpty
+                            || mlxModel.isEmpty
                             || (selectedPattern.flatMap { PatternDomain(rawValue: $0.domainRawValue) } ?? .plushie) != .plushie
                     )
                     .help("Prepare and classify the mesh, propose anatomy cuts or object handling, suggest seams, and generate a reviewable pattern.")
@@ -801,7 +823,7 @@ struct ContentView: View {
 
     private func runAIPipeline() {
         guard let topology = seamEditor.mesh else { return }
-        guard !ollamaModel.isEmpty else {
+        guard !mlxModel.isEmpty else {
             importStatus = "Choose a local vision model before running the AI workflow."
             return
         }
@@ -819,7 +841,7 @@ struct ContentView: View {
         let positions = topology.positions.map { Vec3($0.x, $0.y, $0.z) }
         let triangles = topology.triangles
         let subject = subjectOverride
-        let model = ollamaModel
+        let model = mlxModel
         let fabric = fabricChoice
         let allowance = seamAllowance.points
         isAnalyzingAnatomy = true
@@ -884,7 +906,7 @@ struct ContentView: View {
             .disabled(
                 seamEditor.mesh == nil || isAnalyzingAnatomy || isSuggestingSeams
                     || isFlattening || isImporting || seamEditor.isBusy || !seamEditor.seams.isEmpty
-                    || ollamaModel.isEmpty
+                    || mlxModel.isEmpty
                     || (selectedPattern.flatMap { PatternDomain(rawValue: $0.domainRawValue) } ?? .plushie) != .plushie
             )
             .help("Use registered front, side, and top mesh views with the selected local vision model.")
@@ -1231,7 +1253,7 @@ struct ContentView: View {
                 domain: domain,
                 vertexCount: topology.positions.count,
                 faceCount: topology.triangles.count / 3,
-                model: ollamaModel,
+                model: mlxModel,
                 referenceImageURL: referenceImageURL
             )
 
@@ -1243,8 +1265,8 @@ struct ContentView: View {
                 }
                 plushiePatternPlan = plan
                 seamAdviceStatus = plan == nil
-                    ? "Ollama ranked layouts that already passed flattening verification. Review each before applying."
-                    : "Ollama interpreted the reference image and ranked only verified mesh-derived layouts. Review all suggestions before applying."
+                    ? "The MLX model ranked layouts that already passed flattening verification. Review each before applying."
+                    : "The MLX model interpreted the reference image and ranked only verified mesh-derived layouts. Review all suggestions before applying."
             case .unavailable(let reason):
                 seamSuggestions = candidates
                 seamAdviceStatus = "Local model unavailable: \(reason) Showing layouts ranked by verified distortion, panel balance, and cut length."
@@ -1283,7 +1305,7 @@ struct ContentView: View {
 
     private func analyzeAnatomy() async {
         guard let topology = seamEditor.mesh else { return }
-        guard !ollamaModel.isEmpty else {
+        guard !mlxModel.isEmpty else {
             importStatus = "Choose a local vision model before analyzing anatomy."
             return
         }
@@ -1309,18 +1331,62 @@ struct ContentView: View {
             }
             guard selectedPieceID == pieceID, seamEditor.mesh?.id == topology.id, seamEditor.seams.isEmpty else { return }
             importStatus = "Asking the local vision model for anatomical boundaries…"
-            let plan = try await OnDeviceSeamAdvisor.suggestAnatomy(views: views, model: ollamaModel)
+            let plan = try await OnDeviceSeamAdvisor.suggestAnatomy(views: views, model: mlxModel)
             guard selectedPieceID == pieceID, seamEditor.mesh?.id == topology.id, seamEditor.seams.isEmpty else { return }
             let components = try await offMainActor {
                 try StagedAnatomySplit.split(positions: positions, triangles: triangles, cuts: plan.cuts)
             }
             guard selectedPieceID == pieceID, seamEditor.mesh?.id == topology.id, seamEditor.seams.isEmpty else { return }
             pendingMeshSplit = nil
+            anatomyViews = views
             pendingAnatomicalSplit = (components, plan)
             anatomyPreviewToken += 1
             importStatus = "Review the color-coded anatomy split in the canvas before confirming."
         } catch {
             importStatus = "Anatomical analysis failed: \(error.localizedDescription)"
+        }
+    }
+
+    private struct CorrectionToken: Identifiable {
+        let id = UUID()
+        let plan: AnatomicalCutPlan
+    }
+
+    /// Re-splits the selected mesh at the user's corrected planes and shows it for review again.
+    private func previewCorrectedCuts(_ cuts: [AnatomicalCut]) async -> String {
+        guard let topology = seamEditor.mesh else { return "No mesh is selected." }
+        let positions = topology.positions, triangles = topology.triangles
+        let normalized = AnatomyCutPlanNormalizer.normalize(cuts)
+        do {
+            let components = try await offMainActor {
+                try StagedAnatomySplit.split(positions: positions, triangles: triangles, cuts: normalized)
+            }
+            guard seamEditor.mesh?.id == topology.id else { return "The selected mesh changed." }
+            pendingMeshSplit = nil
+            let plan = AnatomicalCutPlan(summary: correctionPlan?.summary ?? "User-corrected anatomy.", cuts: normalized)
+            pendingAnatomicalSplit = (components, plan)
+            anatomyPreviewToken += 1
+            importStatus = "Review the corrected split in the canvas, then confirm."
+            return "Preview updated: \(components.count) regions. Close this sheet to review and create pieces."
+        } catch {
+            return "That split failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Appends the corrected plan and the model's three views to the MLX training examples.
+    private func saveCorrection(cuts: [AnatomicalCut], notes: String) async -> String {
+        let views = anatomyViews
+        let normalized = AnatomyCutPlanNormalizer.normalize(cuts)
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Plushboii/AnatomyCorrections", isDirectory: true)
+        do {
+            let name = try await offMainActor {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                return try AnatomyCorrectionStore.record(views: views, summary: notes, cuts: normalized, to: directory)
+            }
+            return "Saved \(name). Merge corrections.jsonl from Application Support/Plushboii/AnatomyCorrections into the next training run."
+        } catch {
+            return "Could not save the correction: \(error.localizedDescription)"
         }
     }
 
@@ -1391,26 +1457,26 @@ struct ContentView: View {
         }
     }
 
-    private func refreshOllamaModels() async {
-        isLoadingOllamaModels = true
-        defer { isLoadingOllamaModels = false }
+    private func refreshMLXModels() async {
+        isLoadingMLXModels = true
+        defer { isLoadingMLXModels = false }
         do {
-            let previous = ollamaModels
-            ollamaModels = try await OnDeviceSeamAdvisor.availableModels()
+            let previous = mlxModels
+            mlxModels = try await OnDeviceSeamAdvisor.availableModels()
             let mlx = OnDeviceSeamAdvisor.mlxModelName
-            if ollamaModels.contains(mlx), !previous.contains(mlx) {
-                ollamaModel = mlx
-            } else if !ollamaModels.contains(ollamaModel) {
-                ollamaModel = ollamaModels.first ?? ""
+            if mlxModels.contains(mlx), !previous.contains(mlx) {
+                mlxModel = mlx
+            } else if !mlxModels.contains(mlxModel) {
+                mlxModel = mlxModels.first ?? ""
             }
-            ollamaStatus = ollamaModels.isEmpty
-                ? "No local AI models found. Start mlx-vlm or Ollama, then refresh."
+            mlxStatus = mlxModels.isEmpty
+                ? "No local AI models found. Start the mlx-vlm server, then refresh."
                 : "Local AI models found. Choose a vision-capable model for image-based guidance."
         } catch {
             if Task.isCancelled || (error as? URLError)?.code == .cancelled { return }
-            ollamaModels = []
-            ollamaModel = ""
-            ollamaStatus = error.localizedDescription
+            mlxModels = []
+            mlxModel = ""
+            mlxStatus = error.localizedDescription
         }
     }
 
