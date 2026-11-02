@@ -111,4 +111,46 @@ final class FabricSimulationTests: XCTestCase {
         }
         XCTAssertThrowsError(try FabricNesting.nest(pieces: [FabricNesting.Piece(id: 0, width: 200, height: 5)], fabricWidth: 112))
     }
+
+    func testShapeNestingInterlocksAndNeverOverlaps() throws {
+        // C shape: a 60 x 40 block with a 40 x 20 notch cut into its right side.
+        let c: [Vec2] = [Vec2(0, 0), Vec2(60, 0), Vec2(60, 10), Vec2(20, 10), Vec2(20, 30), Vec2(60, 30), Vec2(60, 40), Vec2(0, 40)]
+        let square: [Vec2] = [Vec2(0, 0), Vec2(12, 0), Vec2(12, 12), Vec2(0, 12)]
+        let shapes = [FabricNesting.Shape(id: 0, outline: c), FabricNesting.Shape(id: 1, outline: square, copies: 3)]
+        let layout = try FabricNesting.nestShapes(shapes, fabricWidth: 70, gap: 0.5)
+        XCTAssertEqual(layout.placements.count, 4)
+        let boxes = try FabricNesting.nest(
+            pieces: [FabricNesting.Piece(id: 0, width: 60, height: 40), FabricNesting.Piece(id: 1, width: 12, height: 12, copies: 3)],
+            fabricWidth: 70, gap: 0.5)
+        XCTAssertLessThanOrEqual(layout.usedLength, boxes.usedLength + 1e-9)
+
+        func inside(_ point: Vec2, _ outline: [Vec2]) -> Bool {
+            var result = false
+            var j = outline.count - 1
+            for i in outline.indices {
+                let a = outline[i], b = outline[j]
+                if (a.y > point.y) != (b.y > point.y), point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x { result.toggle() }
+                j = i
+            }
+            return result
+        }
+        let placed: [[Vec2]] = layout.placements.map { p in
+            shapes[p.id].outline.map { $0 + Vec2(p.x, p.y) }
+        }
+        for outline in placed {
+            XCTAssertGreaterThanOrEqual(outline.map(\.x).min()!, -1e-9)
+            XCTAssertLessThanOrEqual(outline.map(\.x).max()!, 70 + 1e-9)
+            XCTAssertLessThanOrEqual(outline.map(\.y).max()!, layout.usedLength + 1e-9)
+        }
+        var x = 0.25
+        while x < 70 {
+            var y = 0.25
+            while y < layout.usedLength {
+                let hits = placed.filter { inside(Vec2(x, y), $0) }.count
+                XCTAssertLessThanOrEqual(hits, 1, "overlap at \(x), \(y)")
+                y += 0.5
+            }
+            x += 0.5
+        }
+    }
 }
