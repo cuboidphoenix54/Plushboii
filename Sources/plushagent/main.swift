@@ -87,6 +87,7 @@ do {
         result.patternFiles.forEach { print("  pattern: \($0)") }
         report = result.report
     } else {
+        options.plushHeightCentimeters = plushHeight
         report = try PlushAgent.run(input: URL(fileURLWithPath: inputPath), options: options)
     }
     if wantsJSON {

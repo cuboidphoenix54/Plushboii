@@ -14,6 +14,8 @@ public struct PlushAgentOptions: Sendable {
     public var rigidMaximumDarts: Int?
     /// Usable fabric width used to estimate yardage, in centimeters.
     public var fabricWidthCentimeters: Double = 112
+    /// Finished plush height in centimeters; when set, the report estimates fabric yardage.
+    public var plushHeightCentimeters: Double?
     /// Seam allowance for pattern files, in points (1/72 inch).
     public var seamAllowancePoints: Double = 18
     /// Skip seam solving on pieces above this many faces to keep runs bounded.
@@ -197,6 +199,7 @@ public enum PlushAgent {
             report.steps.append("Oriented with \(describe(best.up)) up (\(best.centerOfMassSupported ? "stable" : "center of mass unsupported")).")
             // Plush pose is irrelevant: the stuffed result is rebuilt in a neutral pose, so an unstable scan pose is not a defect.
         }
+        let heightUnits = (positions.map(\.y).max() ?? 1) - (positions.map(\.y).min() ?? 0)
 
         // 4. Symmetry.
         if let mirror = ModelPreparation.detectMirror(positions: positions) {
@@ -405,6 +408,30 @@ public enum PlushAgent {
             let strained = strains.filter { !$0.passed }.count
             if strained > 0 {
                 report.warnings.append("\(strained) panel(s) ask more stretch or shear than \(fabricProperties.name) allows. Add a seam or dart there, or use a stretchier fabric.")
+            }
+        }
+        if let heightCentimeters = options.plushHeightCentimeters, heightCentimeters > 0, heightUnits > 1e-12, !allIslands.isEmpty {
+            var islands: [UVIsland] = []
+            for (island, _) in allIslands {
+                islands.append(UVIsland(segmentIndex: islands.count, triangles: island.triangles, uv: island.uv, sourceVertex: island.sourceVertex,
+                                        darts: island.darts, geometryReport: island.geometryReport, report: island.report, log: island.log))
+            }
+            var layout = LayoutOptions()
+            layout.seamAllowancePoints = options.seamAllowancePoints
+            if let sheet = try? PatternLayout.makeSheet(from: FlatteningResult(islands: islands, fabric: fabric), centimetersPerUnit: heightCentimeters / heightUnits, options: layout) {
+                let scale = PatternUnits.pointsPerCentimeter
+                let shapes = sheet.pieces.enumerated().map { index, piece -> FabricNesting.Shape in
+                    let outline = piece.cutLine.sampled(perSegment: 8).map { Vec2($0.x / scale, $0.y / scale) }
+                    return FabricNesting.Shape(id: index, outline: outline, copies: max(piece.copies, 1))
+                }
+                do {
+                    let nested = try FabricNesting.nestShapes(shapes, fabricWidth: options.fabricWidthCentimeters)
+                    report.construction.append(String(
+                        format: "Fabric needed for a %.0f cm plush: about %.0f cm (%.2f yd) of %.0f cm wide fabric, %.0f%% covered (pieces interlock on a 1 cm grid, no rotation; add 10%% for pile direction and mistakes).",
+                        heightCentimeters, nested.usedLength, nested.usedLength / 91.44, nested.fabricWidth, nested.efficiency * 100))
+                } catch {
+                    report.warnings.append("Fabric estimate skipped: \(error.localizedDescription)")
+                }
             }
         }
         if !flatGroups.isEmpty, flatGroups.count == components.count, triangles.count / 3 <= 12_000 {

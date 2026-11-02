@@ -115,6 +115,19 @@ extension PlushAgent {
             try Data(PatternDXFExporter.dxf(sheet).utf8).write(to: directory.appendingPathComponent("pattern.dxf"))
             try await PatternPDFExporter.a0PDF(sheet).write(to: directory.appendingPathComponent("pattern_a0.pdf"))
             files = ["pattern.svg", "pattern.dxf", "pattern_a0.pdf"]
+            let pointsPerCentimeter = PatternUnits.pointsPerCentimeter
+            let shapes = sheet.pieces.enumerated().map { index, piece -> FabricNesting.Shape in
+                let outline = piece.cutLine.sampled(perSegment: 8).map { Vec2($0.x / pointsPerCentimeter, $0.y / pointsPerCentimeter) }
+                return FabricNesting.Shape(id: index, outline: outline, copies: max(piece.copies, 1))
+            }
+            do {
+                let nested = try FabricNesting.nestShapes(shapes, fabricWidth: options.fabricWidthCentimeters)
+                report.construction.append(String(
+                    format: "Fabric needed: about %.0f cm (%.2f yd) of %.0f cm wide fabric, %.0f%% covered (pieces interlock on a 1 cm grid, no rotation; add 10%% for pile direction and mistakes).",
+                    nested.usedLength, nested.usedLength / 91.44, nested.fabricWidth, nested.efficiency * 100))
+            } catch {
+                report.warnings.append("Fabric estimate skipped: \(error.localizedDescription)")
+            }
         }
         return PlushAgentMLXResult(report: report, summary: summary, cuts: cutLines, patternFiles: files)
     }
