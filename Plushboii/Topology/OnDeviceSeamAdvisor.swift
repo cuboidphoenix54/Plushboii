@@ -87,7 +87,7 @@ struct AnatomyJSONSchema: Encodable, Sendable {
         let type = "array"
         let items = CutItem()
         let minItems = 1
-        let maxItems = 8
+        let maxItems = 9
     }
 
     private struct Properties: Encodable, Sendable {
@@ -127,19 +127,32 @@ enum OnDeviceSeamAdvisor {
         Return only clear, visible boundaries supported by these views. Prefer a small number of useful cuts.
         Do not invent hidden anatomy, diagonal cuts, vertex paths, measurements, or geometry. Do not output cuts
         solely to create arbitrary panels. If the anatomy is ambiguous, lower confidence and explain that in summary.
-        Every cut must be between 0.1 and 0.9 and confidence must be at least 0.55. For each cut, provide the
+        Return no more than 9 cuts. Every cut must be between 0.1 and 0.9 and confidence must be at least 0.55. For each cut, provide the
         anatomical region on the negative (lower coordinate) side and positive (higher coordinate) side. Use
         stable names such as head, torso, left appendage, right appendage, or lower appendage.
         """
 
     private static let client = OllamaSeamAdvisorClient()
 
+    /// Selector entry for the fine-tuned anatomy model served by `mlx_vlm.server`.
+    static let mlxModelName = "mlx-vlm: plushboii-anatomy"
+
     static func availableModels() async throws -> [String] {
-        try await client.availableModels()
+        let mlxReachable = await client.mlxServerReachable()
+        do {
+            let models = try await client.availableModels()
+            return mlxReachable ? [mlxModelName] + models : models
+        } catch {
+            if mlxReachable { return [mlxModelName] }
+            throw error
+        }
     }
 
     static func suggestAnatomy(views: [Data], model: String) async throws -> AnatomicalCutPlan {
-        try await client.suggestAnatomy(views: views, model: model)
+        if model == mlxModelName {
+            return try await client.suggestAnatomyViaMLX(views: views)
+        }
+        return try await client.suggestAnatomy(views: views, model: model)
     }
 
     static func rank(
@@ -151,6 +164,9 @@ enum OnDeviceSeamAdvisor {
         referenceImageURL: URL? = nil
     ) async -> SeamAdviceResult {
         guard !candidates.isEmpty else { return .ranked(candidateIDs: [], plushiePlan: nil) }
+        guard model != mlxModelName else {
+            return .unavailable("The MLX anatomy model only proposes cuts. Choose an Ollama model for seam ranking.")
+        }
         do {
             return try await client.rank(
                 candidates,
@@ -186,33 +202,36 @@ private enum OllamaSeamAdvisorError: LocalizedError {
     case imageUnavailable
     case invalidImage
     case imageTooLarge
+    case mlxServiceUnavailable
 
     var errorDescription: String? {
         switch self {
         case .serviceUnavailable:
             "Could not connect to Ollama at http://127.0.0.1:11434. Start Ollama and refresh the model list."
         case .modelNotSelected:
-            "Select an installed Ollama model before requesting AI ranking."
+            "Select an installed local model before requesting AI ranking."
         case .modelListFailed(let message):
             "Ollama could not list local models: \(message)"
         case .requestFailed(let status, let message):
-            "Ollama returned HTTP \(status): \(message)"
+            "The local model server returned HTTP \(status): \(message)"
         case .requestTimedOut:
             "The local Ollama model did not respond within 180 seconds. Try again or select a smaller vision model."
         case .malformedResponse:
-            "Ollama returned a response that was not valid structured JSON."
+            "The local model returned a response that was not valid structured JSON."
         case .invalidRanking:
             "Ollama did not rank every verified layout exactly once."
         case .invalidPlan:
             "Ollama returned incomplete or out-of-bounds plushie guidance."
         case .invalidAnatomyPlan:
-            "Ollama returned anatomical cuts that were missing, ambiguous, or outside the mesh bounds."
+            "The local model returned anatomical cuts that were missing, ambiguous, or outside the supported mesh bounds."
         case .imageUnavailable:
             "The selected image is no longer accessible. Import it again before requesting image guidance."
         case .invalidImage:
             "The selected image could not be decoded for local model input."
         case .imageTooLarge:
             "The selected image could not be reduced to a local model input."
+        case .mlxServiceUnavailable:
+            "Could not connect to the mlx-vlm server. Start it with PlushboiiTraining/run_server.sh and refresh the model list."
         }
     }
 }
@@ -476,12 +495,120 @@ private actor OllamaSeamAdvisorClient {
             )
         }
 
-        let generated: GeneratedAnatomyPlan
+        let content: Data
         do {
             let chatResponse = try JSONDecoder().decode(ChatResponse.self, from: data)
-            guard let content = chatResponse.message.content.data(using: .utf8) else {
+            guard let bytes = chatResponse.message.content.data(using: .utf8) else {
                 throw OllamaSeamAdvisorError.malformedResponse
             }
+            content = bytes
+        } catch {
+            throw OllamaSeamAdvisorError.malformedResponse
+        }
+        return try Self.anatomyPlan(fromContent: content)
+    }
+
+    private struct MLXChatRequest: Encodable, Sendable {
+        struct ImageURL: Encodable, Sendable {
+            let url: String
+        }
+
+        struct Part: Encodable, Sendable {
+            let type: String
+            let text: String?
+            let imageURL: ImageURL?
+        }
+
+        struct Message: Encodable, Sendable {
+            let role: String
+            let content: [Part]
+        }
+
+        let model: String
+        let adapterPath: String?
+        let messages: [Message]
+        let maxTokens: Int
+        let temperature: Double
+    }
+
+    private struct MLXChatResponse: Decodable, Sendable {
+        struct Choice: Decodable, Sendable {
+            struct Message: Decodable, Sendable {
+                let content: String?
+            }
+            let message: Message
+        }
+        let choices: [Choice]
+    }
+
+    private var mlxBaseURL: URL {
+        let configured = UserDefaults.standard.string(forKey: "mlxvlm.baseURL")
+        return URL(string: configured ?? "") ?? URL(string: "http://127.0.0.1:8080")!
+    }
+
+    func mlxServerReachable() async -> Bool {
+        var request = URLRequest(url: mlxBaseURL.appending(path: "health"))
+        request.httpMethod = "GET"
+        request.timeoutInterval = 2
+        guard let (_, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse
+        else { return false }
+        return http.statusCode == 200
+    }
+
+    func suggestAnatomyViaMLX(views: [Data]) async throws -> AnatomicalCutPlan {
+        guard views.count == AnatomyMeshViewRenderer.View.allCases.count,
+              views.allSatisfy({ !$0.isEmpty && $0.count <= 8 * 1024 * 1024 })
+        else {
+            throw OllamaSeamAdvisorError.invalidAnatomyPlan
+        }
+        let defaults = UserDefaults.standard
+        let adapter = defaults.string(forKey: "mlxvlm.adapterPath")
+        let parts = [MLXChatRequest.Part(type: "text", text: OnDeviceSeamAdvisor.anatomyPrompt, imageURL: nil)]
+            + views.map {
+                MLXChatRequest.Part(
+                    type: "image_url",
+                    text: nil,
+                    imageURL: .init(url: "data:image/png;base64," + $0.base64EncodedString())
+                )
+            }
+        let body = MLXChatRequest(
+            model: defaults.string(forKey: "mlxvlm.model") ?? "mlx-community/gemma-4-e4b-it-4bit",
+            adapterPath: (adapter?.isEmpty ?? true) ? nil : adapter,
+            messages: [.init(role: "user", content: parts)],
+            maxTokens: 1024,
+            temperature: 0
+        )
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        var request = URLRequest(url: mlxBaseURL.appending(path: "v1/chat/completions"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
+
+        let (data, response): (Data, HTTPURLResponse)
+        do {
+            (data, response) = try await perform(request)
+        } catch OllamaSeamAdvisorError.serviceUnavailable {
+            throw OllamaSeamAdvisorError.mlxServiceUnavailable
+        }
+        guard response.statusCode == 200 else {
+            throw OllamaSeamAdvisorError.requestFailed(
+                status: response.statusCode,
+                message: Self.errorMessage(from: data)
+            )
+        }
+        guard let reply = try? JSONDecoder().decode(MLXChatResponse.self, from: data),
+              let content = reply.choices.first?.message.content?.data(using: .utf8)
+        else {
+            throw OllamaSeamAdvisorError.malformedResponse
+        }
+        return try Self.anatomyPlan(fromContent: content)
+    }
+
+    private static func anatomyPlan(fromContent content: Data) throws -> AnatomicalCutPlan {
+        let generated: GeneratedAnatomyPlan
+        do {
             generated = try JSONDecoder().decode(GeneratedAnatomyPlan.self, from: content)
         } catch {
             throw OllamaSeamAdvisorError.malformedResponse
@@ -508,13 +635,23 @@ private actor OllamaSeamAdvisorClient {
                 confidence: proposal.confidence
             )
         }
-        guard cuts.count == generated.cuts.count, !cuts.isEmpty, cuts.count <= 8,
-              Self.validated(generated.summary, maxLength: 300),
-              Self.hasDistinctPlanes(cuts)
+        guard cuts.count == generated.cuts.count, !cuts.isEmpty, cuts.count <= 9,
+              Self.validated(generated.summary, maxLength: 300)
         else {
             throw OllamaSeamAdvisorError.invalidAnatomyPlan
         }
-        return AnatomicalCutPlan(summary: generated.summary, cuts: cuts)
+        let normalizedCuts = AnatomyCutPlanNormalizer.normalize(cuts)
+        guard normalizedCuts.count <= 8,
+              normalizedCuts.allSatisfy({
+                  Self.validated($0.boundary, maxLength: 120)
+                      && Self.validated($0.negativeRegion, maxLength: 48)
+                      && Self.validated($0.positiveRegion, maxLength: 48)
+              }),
+              Self.hasDistinctPlanes(normalizedCuts)
+        else {
+            throw OllamaSeamAdvisorError.invalidAnatomyPlan
+        }
+        return AnatomicalCutPlan(summary: generated.summary, cuts: normalizedCuts)
     }
 
     private func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {

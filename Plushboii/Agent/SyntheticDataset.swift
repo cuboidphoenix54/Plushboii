@@ -4,6 +4,17 @@ import Foundation
 /// (torso, head, wings, legs, tail) blended with a smooth union, so the true joint locations are known from
 /// construction rather than guessed. Meshes get a random axis permutation/flip, as real imports do.
 public enum SyntheticDataset {
+    /// Renders the three advisor views (front/side/top PNGs) of a real OBJ, for evaluating the model on real files.
+    public static func renderViews(of objURL: URL, to outputDirectory: URL) throws {
+        let imported = try OBJMeshReader.read(try Data(contentsOf: objURL))
+        let (positions, triangles) = imported.topologyInput
+        let views = try AnatomyMeshViewRenderer.render(positions: positions, triangles: triangles)
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        for (view, data) in zip(AnatomyMeshViewRenderer.View.allCases, views) {
+            try data.write(to: outputDirectory.appendingPathComponent("\(view.rawValue).png"))
+        }
+    }
+
     private struct SplitMix64: RandomNumberGenerator {
         var state: UInt64
         mutating func next() -> UInt64 {
@@ -19,6 +30,8 @@ public enum SyntheticDataset {
         let name: String
         let center: Vec3
         let radii: Vec3
+        /// Name of the part this one is attached to (`torso` for body-mounted parts).
+        var parent: String = "torso"
 
         func distance(_ p: Vec3) -> Double {
             let q = (p - center) / radii
@@ -59,11 +72,12 @@ public enum SyntheticDataset {
     private struct Message: Codable {
         let role: String
         let content: String
-        let images: [String]?
     }
 
+    /// The layout `mlx_vlm.train` reads: image paths are top-level and relative to the dataset folder.
     private struct Row: Codable {
         let messages: [Message]
+        let images: [String]
     }
 
     public struct Summary: Sendable {
@@ -98,9 +112,9 @@ public enum SyntheticDataset {
             }
             let label = String(decoding: try encoder.encode(example.plan), as: UTF8.self)
             let row = Row(messages: [
-                Message(role: "user", content: OnDeviceSeamAdvisor.anatomyPrompt, images: imagePaths),
-                Message(role: "assistant", content: label, images: nil),
-            ])
+                Message(role: "user", content: OnDeviceSeamAdvisor.anatomyPrompt),
+                Message(role: "assistant", content: label),
+            ], images: imagePaths)
             rows.append(try encoder.encode(row))
             try label.write(to: directory.appendingPathComponent("label.json"), atomically: true, encoding: .utf8)
         }
@@ -124,31 +138,74 @@ public enum SyntheticDataset {
     }
 
     private static func makeCreature(_ rng: inout SplitMix64) -> Creature {
-        let rx = uniform(0.8...1.1, &rng), ry = uniform(0.9...1.2, &rng), rz = uniform(0.7...0.95, &rng)
+        let rx = uniform(0.6...1.1, &rng), ry = uniform(0.7...1.2, &rng), rz = uniform(0.6...0.95, &rng)
         let torso = Part(name: "torso", center: .zero, radii: Vec3(rx, ry, rz))
         var parts: [Part] = []
-        let head = uniform(0.5...0.75, &rng)
-        parts.append(Part(name: "head", center: Vec3(0, ry + head * 0.75, 0), radii: Vec3(head, head * 0.95, head)))
-        if Bool.random(using: &rng) {
-            let span = uniform(0.45...0.65, &rng)
+        func pair(_ prefix: String, parent: String = "torso", _ make: (Double, String) -> Part) {
             for (side, sign) in [("left", 1.0), ("right", -1.0)] {
-                parts.append(Part(name: "\(side) wing", center: Vec3(sign * (rx + span * 0.8), 0.2, -0.1), radii: Vec3(span, 0.35, 0.18)))
-            }
-        } else if Bool.random(using: &rng) {
-            let reach = uniform(0.3...0.45, &rng)
-            for (side, sign) in [("left", 1.0), ("right", -1.0)] {
-                parts.append(Part(name: "\(side) arm", center: Vec3(sign * (rx + reach * 0.8), 0.1, 0.1), radii: Vec3(reach, 0.28, 0.28)))
+                var part = make(sign, "\(prefix)\(side) ")
+                part.parent = parent
+                parts.append(part)
             }
         }
-        if Bool.random(using: &rng) {
-            let leg = uniform(0.28...0.4, &rng)
-            for (side, sign) in [("left", 1.0), ("right", -1.0)] {
-                parts.append(Part(name: "\(side) leg", center: Vec3(sign * rx * 0.5, -ry - leg * 0.8, 0.1), radii: Vec3(leg, leg * 1.1, leg)))
-            }
+
+        let hasHead = Int.random(in: 0..<10, using: &rng) != 0
+        var headCenter = Vec3(0, ry, 0), head = 0.0
+        if hasHead {
+            head = uniform(0.45...1.0, &rng)
+            headCenter = Vec3(0, ry + head * uniform(0.6...0.85, &rng), uniform(-0.1...0.15, &rng))
+            parts.append(Part(name: "head", center: headCenter, radii: Vec3(head, head * uniform(0.85...1.0, &rng), head)))
         }
-        if Int.random(in: 0..<3, using: &rng) == 0 {
-            let tail = uniform(0.22...0.32, &rng)
-            parts.append(Part(name: "tail", center: Vec3(0, -0.3, -(rz + tail * 1.2)), radii: Vec3(tail, tail, tail * 1.4)))
+
+        switch Int.random(in: 0..<5, using: &rng) {
+        case 0:
+            let span = uniform(0.4...0.95, &rng), y = uniform(-0.3...0.45, &rng), z = uniform(-0.2...0.15, &rng)
+            pair("", { sign, p in Part(name: p + "wing", center: Vec3(sign * (rx + span * 0.8), y, z), radii: Vec3(span, uniform(0.18...0.4, &rng), 0.16)) })
+        case 1:
+            let reach = uniform(0.3...0.55, &rng), y = uniform(-0.2...0.4, &rng), w = uniform(0.2...0.32, &rng)
+            pair("", { sign, p in Part(name: p + "arm", center: Vec3(sign * (rx + reach * 0.8), y, 0.1), radii: Vec3(reach, w, w)) })
+        case 2:
+            let span = uniform(0.4...0.8, &rng), reach = uniform(0.3...0.45, &rng)
+            pair("", { sign, p in Part(name: p + "wing", center: Vec3(sign * (rx + span * 0.8), 0.55, -0.15), radii: Vec3(span, 0.3, 0.15)) })
+            pair("", { sign, p in Part(name: p + "arm", center: Vec3(sign * (rx + reach * 0.8), -0.25, 0.15), radii: Vec3(reach, 0.25, 0.25)) })
+        default:
+            break
+        }
+
+        switch Int.random(in: 0..<10, using: &rng) {
+        case 0..<5:
+            let leg = uniform(0.26...0.45, &rng)
+            pair("", { sign, p in Part(name: p + "leg", center: Vec3(sign * rx * 0.5, -ry - leg * 0.8, 0.1), radii: Vec3(leg, leg * uniform(0.9...1.3, &rng), leg)) })
+        case 5..<7:
+            let leg = uniform(0.24...0.36, &rng)
+            for (zName, zSign) in [("front", 1.0), ("back", -1.0)] {
+                pair("", { sign, p in Part(name: "\(zName) \(p)leg", center: Vec3(sign * rx * 0.55, -ry - leg * 0.7, zSign * rz * 0.6), radii: Vec3(leg, leg * 1.2, leg)) })
+            }
+        default:
+            break
+        }
+
+        if Int.random(in: 0..<10, using: &rng) < 4 {
+            let tail = uniform(0.2...0.34, &rng), length = uniform(1.2...2.2, &rng)
+            parts.append(Part(name: "tail", center: Vec3(0, uniform(-0.5...0.1, &rng), -(rz + tail * length)), radii: Vec3(tail, tail, tail * length)))
+        }
+
+        if hasHead {
+            let roll = Int.random(in: 0..<10, using: &rng)
+            if roll < 4 {
+                let ear = head * uniform(0.25...0.45, &rng)
+                pair("", parent: "head", { sign, p in Part(name: p + "ear", center: headCenter + Vec3(sign * head * 0.6, head * 0.95, 0), radii: Vec3(ear * 0.6, ear * 1.5, ear * 0.5)) })
+            } else if roll < 6 {
+                let horn = head * uniform(0.18...0.3, &rng)
+                var part = Part(name: "horn", center: headCenter + Vec3(0, head + horn * 1.2, 0), radii: Vec3(horn, horn * 1.6, horn))
+                part.parent = "head"
+                parts.append(part)
+            } else if roll < 7 {
+                let snout = head * uniform(0.35...0.5, &rng)
+                var part = Part(name: "snout", center: headCenter + Vec3(0, -head * 0.2, head + snout * 0.5), radii: Vec3(snout, snout * 0.7, snout * 1.1))
+                part.parent = "head"
+                parts.append(part)
+            }
         }
         return Creature(torso: torso, appendages: parts)
     }
@@ -158,7 +215,7 @@ public enum SyntheticDataset {
         rng: inout SplitMix64,
         resolution n: Int
     ) throws -> (positions: [Vec3], triangles: [Int32], plan: LabelPlan) {
-        let extent = 4.4
+        let extent = 6.4
         let spacing = extent / Double(n - 1)
         let origin = Vec3(repeating: -extent / 2)
         var values = [Float](repeating: 0, count: n * n * n)
@@ -194,12 +251,13 @@ public enum SyntheticDataset {
         var cuts: [LabelCut] = []
         for part in creature.appendages {
             // The joint is where the two parts' surfaces are equidistant on the segment between their centers.
-            let a = creature.torso.center, b = part.center
+            let parent = creature.parts.first { $0.name == part.parent } ?? creature.torso
+            let a = parent.center, b = part.center
             var low = 0.0, high = 1.0
             for _ in 0..<40 {
                 let mid = (low + high) / 2
                 let p = a + (b - a) * mid
-                if creature.torso.distance(p) < part.distance(p) { low = mid } else { high = mid }
+                if parent.distance(p) < part.distance(p) { low = mid } else { high = mid }
             }
             let joint = a + (b - a) * ((low + high) / 2)
             let direction = transform(b - a)
@@ -212,15 +270,40 @@ public enum SyntheticDataset {
                 axis: axes[axis],
                 normalizedPosition: (position * 1000).rounded() / 1000,
                 boundary: "\(part.name) joint",
-                negativeRegion: partIsPositive ? "torso" : part.name,
-                positiveRegion: partIsPositive ? part.name : "torso",
+                negativeRegion: partIsPositive ? parent.name : part.name,
+                positiveRegion: partIsPositive ? part.name : parent.name,
                 confidence: 0.9
             ))
         }
-        guard !cuts.isEmpty else { throw PlushAgentError.unreadable("no usable joints") }
-        let names = creature.appendages.map(\.name).joined(separator: ", ")
-        let plan = LabelPlan(summary: "Torso with \(creature.appendages.count) joined parts: \(names). Cut at each joint.", cuts: cuts)
+        let geometryCuts = try cuts.map { cut -> AnatomicalCut in
+            guard let axis = AnatomicalAxis(rawValue: cut.axis) else {
+                throw PlushAgentError.unreadable("generated cut has an invalid axis")
+            }
+            return AnatomicalCut(
+                axis: axis,
+                normalizedPosition: cut.normalizedPosition,
+                boundary: cut.boundary,
+                negativeRegion: cut.negativeRegion,
+                positiveRegion: cut.positiveRegion,
+                confidence: cut.confidence
+            )
+        }
+        let mergedCuts = AnatomyCutPlanNormalizer.normalize(geometryCuts).map {
+            LabelCut(
+                axis: $0.axis.rawValue,
+                normalizedPosition: $0.normalizedPosition,
+                boundary: $0.boundary,
+                negativeRegion: $0.negativeRegion,
+                positiveRegion: $0.positiveRegion,
+                confidence: $0.confidence
+            )
+        }
+        // Keep generated plans within the splitter and advisor's supported cut limit.
+        guard !mergedCuts.isEmpty, mergedCuts.count <= 8 else { throw PlushAgentError.unreadable("no usable joints") }
+        let names = mergedCuts.map { $0.boundary.replacingOccurrences(of: " joint", with: "") }.joined(separator: ", ")
+        let plan = LabelPlan(summary: "Torso with \(mergedCuts.count) joined parts: \(names). Cut at each joint.", cuts: mergedCuts)
         positions = positions.map { $0 }
         return (positions, fixedTriangles, plan)
     }
+
 }

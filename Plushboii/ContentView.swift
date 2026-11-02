@@ -102,6 +102,7 @@ struct ContentView: View {
     @State private var ollamaModel = ""
     @State private var ollamaStatus: String?
     @State private var isLoadingOllamaModels = false
+    @State private var isShowingLocalModelSettings = false
     @State private var referenceImageForPiece: (pieceID: UUID, url: URL)?
     @State private var previewSeamSuggestionID: String?
     @State private var showError = false
@@ -145,6 +146,9 @@ struct ContentView: View {
             detailView
         }
         .navigationTitle("Plushboii")
+        .sheet(isPresented: $isShowingLocalModelSettings) {
+            LocalModelSettingsView()
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: createPattern) {
@@ -422,17 +426,20 @@ struct ContentView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 360)
                     Picker("Local model", selection: $ollamaModel) {
-                        Text("Select Ollama model").tag("")
+                        Text("Select local model").tag("")
                         ForEach(ollamaModels, id: \.self) { model in
                             Text(model).tag(model)
                         }
                     }
                     .frame(maxWidth: 230)
-                    .help("For image-based pattern advice, select a vision-capable model already installed in Ollama.")
-                    Button(isLoadingOllamaModels ? "Checking…" : "Find Models") {
+                    .help("Select the MLX anatomy model or a vision-capable model installed in Ollama.")
+                    Button(isLoadingOllamaModels ? "Checking…" : "Refresh Models") {
                         Task { await refreshOllamaModels() }
                     }
                     .disabled(isLoadingOllamaModels)
+                    Button("AI Settings", systemImage: "slider.horizontal.3") {
+                        isShowingLocalModelSettings = true
+                    }
                     if isImporting {
                         ProgressView()
                             .controlSize(.small)
@@ -600,7 +607,7 @@ struct ContentView: View {
                     || ollamaModel.isEmpty
                     || (selectedPattern.flatMap { PatternDomain(rawValue: $0.domainRawValue) } ?? .plushie) != .plushie
             )
-            .help("Use registered front, side, and top mesh views with a vision-capable local Ollama model.")
+            .help("Use registered front, side, and top mesh views with the selected local vision model.")
             Button("Split Mesh") {
                 splitSelectedMesh()
             }
@@ -978,7 +985,7 @@ struct ContentView: View {
     private func analyzeAnatomy() async {
         guard let topology = seamEditor.mesh else { return }
         guard !ollamaModel.isEmpty else {
-            importStatus = "Choose a vision-capable local Ollama model before analyzing anatomy."
+            importStatus = "Choose a local vision model before analyzing anatomy."
             return
         }
         guard seamEditor.seams.isEmpty else {
@@ -1086,8 +1093,8 @@ struct ContentView: View {
                 ollamaModel = ollamaModels.first ?? ""
             }
             ollamaStatus = ollamaModels.isEmpty
-                ? "Ollama is running, but no local models are installed."
-                : "Local Ollama models found. Choose a vision-capable model for image-based guidance."
+                ? "No local AI models found. Start mlx-vlm or Ollama, then refresh."
+                : "Local AI models found. Choose a vision-capable model for image-based guidance."
         } catch {
             ollamaModels = []
             ollamaModel = ""
@@ -1247,5 +1254,41 @@ struct ContentView: View {
     private func present(_ error: Error) {
         errorMessage = error.localizedDescription
         showError = true
+    }
+}
+
+@MainActor
+private struct LocalModelSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("mlxvlm.baseURL") private var mlxBaseURL = "http://127.0.0.1:8080"
+    @AppStorage("mlxvlm.model") private var mlxModel = "mlx-community/gemma-4-e4b-it-4bit"
+    @AppStorage("mlxvlm.adapterPath") private var mlxAdapterPath = ""
+
+    var body: some View {
+        Form {
+            Section("MLX-VLM server") {
+                TextField("Server URL", text: $mlxBaseURL)
+                    .textContentType(.URL)
+                TextField("Base model", text: $mlxModel)
+                TextField("LoRA adapter path", text: $mlxAdapterPath)
+                    .font(.system(.body, design: .monospaced))
+                Text("Enter the adapter's full path. The mlx-vlm server must be able to read it; a blank path may use the untuned base model.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Text("Start the local server before refreshing models. Settings are saved automatically and apply to the next request.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .frame(width: 520)
     }
 }

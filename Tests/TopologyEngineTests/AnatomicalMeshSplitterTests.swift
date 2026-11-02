@@ -16,12 +16,49 @@ final class AnatomicalMeshSplitterTests: XCTestCase {
         XCTAssertEqual(schema["type"] as? String, "object")
         XCTAssertEqual(item["type"] as? String, "object")
         XCTAssertEqual(cuts["type"] as? String, "array")
-        XCTAssertEqual(cuts["maxItems"] as? Int, 8)
+        XCTAssertEqual(cuts["maxItems"] as? Int, 9)
         XCTAssertEqual(axis["enum"] as? [String], ["x", "y", "z"])
         XCTAssertTrue(required.contains("negativeRegion"))
         XCTAssertTrue(required.contains("positiveRegion"))
         XCTAssertNotNil(cutProperties["normalizedPosition"])
         XCTAssertEqual(item["additionalProperties"] as? Bool, false)
+    }
+
+    func testNearCoincidentAnatomyPlanesMergeAndRetainBothLabels() throws {
+        let normalized = AnatomyCutPlanNormalizer.normalize([
+            AnatomicalCut(
+                axis: .x,
+                normalizedPosition: 0.31,
+                boundary: "left leg joint",
+                negativeRegion: "torso",
+                positiveRegion: "left leg",
+                confidence: 0.9
+            ),
+            AnatomicalCut(
+                axis: .x,
+                normalizedPosition: 0.32,
+                boundary: "right leg joint",
+                negativeRegion: "torso",
+                positiveRegion: "right leg",
+                confidence: 0.8
+            ),
+            AnatomicalCut(
+                axis: .z,
+                normalizedPosition: 0.6,
+                boundary: "head joint",
+                negativeRegion: "torso",
+                positiveRegion: "head",
+                confidence: 0.9
+            ),
+        ])
+
+        XCTAssertEqual(normalized.count, 2)
+        let legs = try XCTUnwrap(normalized.first { $0.axis == .x })
+        XCTAssertEqual(legs.normalizedPosition, 0.315, accuracy: 1e-12)
+        XCTAssertEqual(legs.boundary, "left leg joint / right leg joint")
+        XCTAssertEqual(legs.negativeRegion, "torso")
+        XCTAssertEqual(legs.positiveRegion, "left leg / right leg")
+        XCTAssertEqual(legs.confidence, 0.8)
     }
 
     func testRegisteredOrthographicViewsRenderValidImages() throws {

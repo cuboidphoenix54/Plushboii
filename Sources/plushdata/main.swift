@@ -13,6 +13,20 @@ func fail(_ message: String) -> Never {
     exit(2)
 }
 
+if arguments.first == "views" {
+    guard arguments.count == 3 else { fail("usage: plushdata views <file.obj> <output-dir>") }
+    do {
+        try SyntheticDataset.renderViews(
+            of: URL(fileURLWithPath: arguments[1]),
+            to: URL(fileURLWithPath: arguments[2], isDirectory: true)
+        )
+        print("Wrote front/side/top PNGs to \(arguments[2])")
+        exit(0)
+    } catch {
+        fail(error.localizedDescription)
+    }
+}
+
 while !arguments.isEmpty {
     let argument = arguments.removeFirst()
     switch argument {

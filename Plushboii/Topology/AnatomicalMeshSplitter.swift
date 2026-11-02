@@ -25,6 +25,47 @@ struct AnatomicalCut: Codable, Equatable, Sendable {
     let confidence: Double
 }
 
+enum AnatomyCutPlanNormalizer {
+    static let planeMergeTolerance = 0.03
+
+    static func normalize(_ cuts: [AnatomicalCut]) -> [AnatomicalCut] {
+        let sorted = cuts.sorted {
+            $0.axis == $1.axis
+                ? $0.normalizedPosition < $1.normalizedPosition
+                : $0.axis.rawValue < $1.axis.rawValue
+        }
+        var groups: [[AnatomicalCut]] = []
+        for cut in sorted {
+            if let last = groups.indices.last,
+               groups[last][0].axis == cut.axis,
+               cut.normalizedPosition
+                    - groups[last].map(\.normalizedPosition).reduce(0, +) / Double(groups[last].count)
+                    < planeMergeTolerance {
+                groups[last].append(cut)
+            } else {
+                groups.append([cut])
+            }
+        }
+        return groups.map { group in
+            func joined(_ keyPath: KeyPath<AnatomicalCut, String>) -> String {
+                var values: [String] = []
+                for value in group.map({ $0[keyPath: keyPath] }) where !values.contains(value) {
+                    values.append(value)
+                }
+                return values.joined(separator: " / ")
+            }
+            return AnatomicalCut(
+                axis: group[0].axis,
+                normalizedPosition: group.map(\.normalizedPosition).reduce(0, +) / Double(group.count),
+                boundary: joined(\.boundary),
+                negativeRegion: joined(\.negativeRegion),
+                positiveRegion: joined(\.positiveRegion),
+                confidence: group.map(\.confidence).min() ?? group[0].confidence
+            )
+        }
+    }
+}
+
 /// An oriented plane: signed distance is `dot(normal, point) - offset` with a unit normal.
 struct CutPlane: Sendable, Equatable {
     let normal: Vec3
