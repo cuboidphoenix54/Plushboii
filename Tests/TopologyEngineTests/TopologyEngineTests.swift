@@ -50,12 +50,42 @@ final class TopologyEngineTests: XCTestCase {
         XCTAssertTrue(minky.islands[0].darts.isEmpty)
     }
 
-    func testStronglyCurvedSurfaceIsRejectedNotReturned() {
+    func testStronglyCurvedSurfaceIsSplitIntoVerifiedPanels() throws {
         let (p, t) = grid(16) { u, v in
             let th = (u - 0.5) * Double.pi * 0.9, ph = (v - 0.5) * Double.pi * 0.9
             return Vec3(sin(th) * cos(ph), sin(ph), cos(th) * cos(ph))
         }
-        XCTAssertThrowsError(try TopologyEngine.flatten(positions: p, triangles: t, seams: []))
+        let result = try TopologyEngine.flatten(positions: p, triangles: t, seams: [])
+        XCTAssertGreaterThan(result.islands.count, 1)
+        XCTAssertLessThanOrEqual(result.islands.count, 4)
+        XCTAssertTrue(result.islands.allSatisfy(\.report.passed))
+
+        var sourceEdgeCounts: [UInt64: Int] = [:]
+        for corner in stride(from: 0, to: t.count, by: 3) {
+            for index in 0..<3 {
+                sourceEdgeCounts[SurfaceCutter.edgeKey(t[corner + index], t[corner + (index + 1) % 3]), default: 0] += 1
+            }
+        }
+        var boundaryCopies: [UInt64: Int] = [:]
+        for island in result.islands {
+            var localEdgeCounts: [UInt64: Int] = [:]
+            for corner in stride(from: 0, to: island.triangles.count, by: 3) {
+                for index in 0..<3 {
+                    localEdgeCounts[SurfaceCutter.edgeKey(
+                        island.triangles[corner + index],
+                        island.triangles[corner + (index + 1) % 3]
+                    ), default: 0] += 1
+                }
+            }
+            for (edge, count) in localEdgeCounts where count == 1 {
+                let a = island.sourceVertex[Int(edge >> 32)]
+                let b = island.sourceVertex[Int(edge & 0xFFFF_FFFF)]
+                boundaryCopies[SurfaceCutter.edgeKey(Int32(a), Int32(b)), default: 0] += 1
+            }
+        }
+        let adaptiveCutEdges = boundaryCopies.filter { sourceEdgeCounts[$0.key] == 2 }
+        XCTAssertFalse(adaptiveCutEdges.isEmpty)
+        XCTAssertTrue(adaptiveCutEdges.values.allSatisfy { $0 == 2 })
     }
 
     func testClosedMeshWithoutSeamsIsRejected() {

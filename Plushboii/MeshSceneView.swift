@@ -5,7 +5,16 @@ import simd
 
 struct MeshSceneView: NSViewRepresentable {
     let mesh: MeshTopology?
+    /// Node produced by a `MeshIngestionService`; used instead of rebuilding geometry when it matches `mesh`.
+    let ingestedNode: SCNNode?
     let seams: [SeamPath]
+    let suggestedSeams: [SeamSuggestion]
+    let previewComponents: [MeshComponent]?
+    let previewToken: Int
+    /// Per-vertex stretch severity (0...1) to paint as a white-to-red heatmap; nil shows the plain surface.
+    var heatSeverity: [Double]? = nil
+    var heatToken = 0
+    var joints: [AnatomicalJoint] = []
     let isPickingEnabled: Bool
     let resetToken: Int
     let onPick: @MainActor (Int, Bool) -> Void
@@ -21,7 +30,16 @@ struct MeshSceneView: NSViewRepresentable {
         view.onPick = onPick
         view.onUndo = onUndo
         view.isPickingEnabled = isPickingEnabled
-        view.apply(mesh: mesh, seams: seams)
+        view.apply(
+            mesh: mesh,
+            seams: seams,
+            suggestedSeams: suggestedSeams,
+            previewComponents: previewComponents,
+            previewToken: previewToken,
+            ingestedNode: ingestedNode
+        )
+        view.applyHeat(heatSeverity, token: heatToken)
+        view.applyJoints(joints)
         view.applyResetToken(resetToken)
     }
 }
@@ -39,12 +57,20 @@ final class TrackpadSCNView: SCNView {
     private let panNode = SCNNode()
     private let orbitNode = SCNNode()
     private let overlayNode = SCNNode()
+    private let previewNode = SCNNode()
+    private let heatNode = SCNNode()
+    private let jointNode = SCNNode()
+    private var appliedJoints: [AnatomicalJoint] = []
+    private var lastHeatToken = -1
     private let cameraNode = SCNNode()
     private var meshNode: SCNNode?
+    private var ingestedNode: SCNNode?
     private var mesh: MeshTopology?
     private var appliedSeams: [SeamPath] = []
+    private var appliedSuggestions: [SeamSuggestion] = []
     private var distance = 3.0
     private var lastResetToken = 0
+    private var lastPreviewToken = -1
     private var mouseDownPoint = CGPoint.zero
     private var didDrag = false
 
@@ -59,6 +85,9 @@ final class TrackpadSCNView: SCNView {
         scene.rootNode.addChildNode(panNode)
         panNode.addChildNode(orbitNode)
         orbitNode.addChildNode(overlayNode)
+        orbitNode.addChildNode(jointNode)
+        orbitNode.addChildNode(previewNode)
+        orbitNode.addChildNode(heatNode)
 
         let camera = SCNCamera()
         camera.fieldOfView = 45
@@ -84,18 +113,104 @@ final class TrackpadSCNView: SCNView {
         updateCamera()
     }
 
-    func apply(mesh newMesh: MeshTopology?, seams: [SeamPath]) {
-        var overlayDirty = seams != appliedSeams
+    func apply(
+        mesh newMesh: MeshTopology?,
+        seams: [SeamPath],
+        suggestedSeams: [SeamSuggestion],
+        previewComponents: [MeshComponent]?,
+        previewToken: Int,
+        ingestedNode node: SCNNode?
+    ) {
+        ingestedNode = node
+        var overlayDirty = seams != appliedSeams || suggestedSeams != appliedSuggestions
+        var meshChanged = false
         if newMesh?.id != mesh?.id {
             mesh = newMesh
             rebuildMeshNode()
             resetCamera()
             overlayDirty = true
+            meshChanged = true
+        }
+        if previewToken != lastPreviewToken || meshChanged {
+            lastPreviewToken = previewToken
+            rebuildPreview(previewComponents)
         }
         if overlayDirty {
             appliedSeams = seams
-            rebuildOverlay(seams)
+            appliedSuggestions = suggestedSeams
+            rebuildOverlay(seams, suggestions: suggestedSeams)
         }
+    }
+
+    /// Draws each joint as a red anchor and a translucent disc showing the plane its cut will follow.
+    func applyJoints(_ joints: [AnatomicalJoint]) {
+        guard joints != appliedJoints else { return }
+        appliedJoints = joints
+        jointNode.childNodes.forEach { $0.removeFromParentNode() }
+        guard let mesh else { return }
+        let radius = CGFloat(mesh.radius * 0.28)
+        for joint in joints {
+            let center = SCNVector3(x: CGFloat(joint.position.x), y: CGFloat(joint.position.y), z: CGFloat(joint.position.z))
+            let disc = SCNCylinder(radius: radius, height: radius * 0.02)
+            let discMaterial = SCNMaterial()
+            discMaterial.lightingModel = .constant
+            discMaterial.diffuse.contents = NSColor.systemOrange.withAlphaComponent(0.35)
+            discMaterial.isDoubleSided = true
+            discMaterial.writesToDepthBuffer = false
+            disc.materials = [discMaterial]
+            let discNode = SCNNode(geometry: disc)
+            discNode.position = center
+            let direction = simd_normalize(SIMD3<Float>(Float(joint.direction.x), Float(joint.direction.y), Float(joint.direction.z)))
+            if direction.x.isFinite { discNode.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction) }
+            jointNode.addChildNode(discNode)
+
+            let anchor = SCNSphere(radius: radius * 0.07)
+            let anchorMaterial = SCNMaterial()
+            anchorMaterial.lightingModel = .constant
+            anchorMaterial.diffuse.contents = NSColor.systemRed
+            anchor.materials = [anchorMaterial]
+            let anchorNode = SCNNode(geometry: anchor)
+            anchorNode.position = center
+            jointNode.addChildNode(anchorNode)
+        }
+    }
+
+    func applyHeat(_ severity: [Double]?, token: Int) {
+        guard token != lastHeatToken else { return }
+        lastHeatToken = token
+        heatNode.childNodes.forEach { $0.removeFromParentNode() }
+        guard let mesh, let severity, severity.count == mesh.positions.count else {
+            if previewNode.childNodes.isEmpty { meshNode?.isHidden = false }
+            return
+        }
+        let vertices = mesh.positions.map { SCNVector3(x: CGFloat($0.x), y: CGFloat($0.y), z: CGFloat($0.z)) }
+        let normals = mesh.normals.map { SCNVector3(x: CGFloat($0.x), y: CGFloat($0.y), z: CGFloat($0.z)) }
+        var colors = [Float]()
+        colors.reserveCapacity(severity.count * 4)
+        for value in severity {
+            let c = PatternQualityMap.heatColor(value)
+            colors.append(contentsOf: [Float(c.red), Float(c.green), Float(c.blue), 1])
+        }
+        let colorSource = SCNGeometrySource(
+            data: colors.withUnsafeBytes { Data($0) },
+            semantic: .color,
+            vectorCount: severity.count,
+            usesFloatComponents: true,
+            componentsPerVector: 4,
+            bytesPerComponent: MemoryLayout<Float>.size,
+            dataOffset: 0,
+            dataStride: MemoryLayout<Float>.size * 4
+        )
+        let geometry = SCNGeometry(
+            sources: [SCNGeometrySource(vertices: vertices), SCNGeometrySource(normals: normals), colorSource],
+            elements: [SCNGeometryElement(indices: mesh.triangles, primitiveType: .triangles)]
+        )
+        let material = SCNMaterial()
+        material.diffuse.contents = NSColor.white
+        material.isDoubleSided = true
+        geometry.materials = [material]
+        heatNode.addChildNode(SCNNode(geometry: geometry))
+        meshNode?.isHidden = true
     }
 
     func applyResetToken(_ token: Int) {
@@ -110,6 +225,15 @@ final class TrackpadSCNView: SCNView {
         meshNode?.removeFromParentNode()
         meshNode = nil
         guard let mesh else { return }
+
+        // The ingested node shares vertex numbering with the stored mesh, so picks still index correctly.
+        if let node = ingestedNode,
+           node.geometry?.sources(for: .vertex).first?.vectorCount == mesh.positions.count {
+            node.removeFromParentNode()
+            orbitNode.addChildNode(node)
+            meshNode = node
+            return
+        }
 
         let vertices = mesh.positions.map { SCNVector3(x: CGFloat($0.x), y: CGFloat($0.y), z: CGFloat($0.z)) }
         let normals = mesh.normals.map { SCNVector3(x: CGFloat($0.x), y: CGFloat($0.y), z: CGFloat($0.z)) }
@@ -127,7 +251,7 @@ final class TrackpadSCNView: SCNView {
         meshNode = node
     }
 
-    private func rebuildOverlay(_ seams: [SeamPath]) {
+    private func rebuildOverlay(_ seams: [SeamPath], suggestions: [SeamSuggestion]) {
         overlayNode.childNodes.forEach { $0.removeFromParentNode() }
         guard let mesh else { return }
 
@@ -146,6 +270,9 @@ final class TrackpadSCNView: SCNView {
         let lineMaterial = SCNMaterial()
         lineMaterial.lightingModel = .constant
         lineMaterial.diffuse.contents = NSColor.systemOrange
+        let suggestionMaterial = SCNMaterial()
+        suggestionMaterial.lightingModel = .constant
+        suggestionMaterial.diffuse.contents = NSColor.systemPurple
         let markerMaterial = SCNMaterial()
         markerMaterial.lightingModel = .constant
         markerMaterial.diffuse.contents = NSColor.systemRed
@@ -173,6 +300,55 @@ final class TrackpadSCNView: SCNView {
                 marker.position = lifted(anchor)
                 overlayNode.addChildNode(marker)
             }
+        }
+
+        for suggestion in suggestions {
+            for path in suggestion.seamPaths {
+                guard path.count >= 2, path.allSatisfy(mesh.positions.indices.contains) else { continue }
+                let points = path.map(lifted)
+                var indices: [Int32] = []
+                indices.reserveCapacity((points.count - 1) * 2)
+                for i in 0..<(points.count - 1) {
+                    indices.append(Int32(i))
+                    indices.append(Int32(i + 1))
+                }
+                let geometry = SCNGeometry(
+                    sources: [SCNGeometrySource(vertices: points)],
+                    elements: [SCNGeometryElement(indices: indices, primitiveType: .line)]
+                )
+                geometry.materials = [suggestionMaterial]
+                overlayNode.addChildNode(SCNNode(geometry: geometry))
+            }
+        }
+    }
+
+    private func rebuildPreview(_ components: [MeshComponent]?) {
+        previewNode.childNodes.forEach { $0.removeFromParentNode() }
+        guard let components else {
+            meshNode?.isHidden = false
+            return
+        }
+
+        meshNode?.isHidden = true
+        for (index, component) in components.enumerated() {
+            let vertices = component.positions.map {
+                SCNVector3(x: CGFloat($0.x), y: CGFloat($0.y), z: CGFloat($0.z))
+            }
+            let geometry = SCNGeometry(
+                sources: [SCNGeometrySource(vertices: vertices)],
+                elements: [SCNGeometryElement(indices: component.triangles, primitiveType: .triangles)]
+            )
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = NSColor(
+                calibratedHue: CGFloat((Double(index) * 0.61803398875).truncatingRemainder(dividingBy: 1)),
+                saturation: 0.72,
+                brightness: 0.88,
+                alpha: 1
+            )
+            material.isDoubleSided = true
+            geometry.materials = [material]
+            previewNode.addChildNode(SCNNode(geometry: geometry))
         }
     }
 
