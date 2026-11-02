@@ -182,6 +182,7 @@ struct ContentView: View {
     @State private var heatSeverity: [Double]?
     @State private var heatToken = 0
     @State private var qualitySummary: String?
+    @State private var stuffingSummary: String?
     @State private var dedupeCongruent = true
     @State private var labelSeams = true
     @State private var showFurArrows = true
@@ -1004,6 +1005,7 @@ struct ContentView: View {
         HStack(spacing: 10) {
             Label("\(flattening?.islands.count ?? 0) pattern panel(s) ready", systemImage: "checkmark.circle")
                 .font(.caption)
+                .help(stuffingSummary ?? "")
             TextField("plush height (cm)", text: $plushHeightCentimeters)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 130)
@@ -1014,7 +1016,7 @@ struct ContentView: View {
                 .help("Enter the known physical scale. OBJ and STL files may not specify real-world units.")
             Toggle("Stretch map", isOn: $showHeatmap)
                 .toggleStyle(.button)
-                .help(qualitySummary ?? "Show where fabric must stretch (red) on the 3D model")
+                .help([qualitySummary, stuffingSummary].compactMap { $0 }.joined(separator: "\n").nilIfEmpty ?? "Show where fabric must stretch (red) on the 3D model")
             Menu("Options") {
                 Toggle("Merge identical pieces", isOn: $dedupeCongruent)
                 Toggle("Label seams", isOn: $labelSeams)
@@ -1528,6 +1530,19 @@ struct ContentView: View {
             let worstText = (quality.1 * 100).formatted(.number.precision(.fractionLength(0)))
             qualitySummary = "Average stretch \(percent(quality.3))%; \(percent(quality.4))% of the surface stretches over \(limit)% (worst single triangle \(worstText)%, usually a sliver)"
                 + (quality.2 > 0 ? ", \(quality.2) flipped triangle(s)" : "")
+            stuffingSummary = nil
+            if triangles.count / 3 <= 12_000 {
+                let properties = FabricProperties.inferred(from: fabric)
+                let sim = try? await offMainActor {
+                    var options = StuffingSimulator.Options()
+                    options.properties = properties
+                    let lengths = StuffingSimulator.restLengths(from: [(islands: result.islands, sourceVertices: nil)])
+                    return try StuffingSimulator.simulate(positions: positions, triangles: triangles, restLengths: lengths, options: options)
+                }
+                if let sim {
+                    stuffingSummary = String(format: "Stuffed preview: holds %.0f%% of the target volume, shape off by %.1f%%, max seam strain %.0f%%%@.", sim.volumeRatio * 100, sim.shapeDeviation * 100, sim.maxEdgeStrain * 100, sim.exceedsFabric ? " (past what the fabric allows)" : "")
+                }
+            }
             let worst = result.islands.map(\.report.areaDelta).max() ?? 0
             let darts = result.islands.reduce(0) { $0 + $1.darts.count }
             importStatus = "Pattern ready: \(result.islands.count) panel(s), worst area delta \((worst * 100).formatted(.number.precision(.fractionLength(2))))%, \(darts) dart(s). Enter cm per mesh unit to export at physical scale."
@@ -1778,4 +1793,8 @@ private struct LocalModelSettingsView: View {
         .padding()
         .frame(width: 520)
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
