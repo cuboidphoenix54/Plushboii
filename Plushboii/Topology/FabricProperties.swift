@@ -3,6 +3,11 @@ import Foundation
 /// Fabric behaviour on four independent axes (warp stretch, weft stretch, shear, bending), the same breakdown
 /// that garment-simulation tools expose, instead of a single stretch percentage.
 ///
+/// Preset stretch values sit inside the published category bands (woven/felt/faux fur: minimal to 0-10%; knit
+/// fleece and minky: moderate, 25-50%; see blog.treasurie.com/stretch-factor-fabrics-tutorial and
+/// eoveafabric.com fabric guide). Per-fabric figures are not published at that resolution, so within a band they
+/// are typical choices rather than measurements.
+///
 /// The presets are adjustable starting points for typical plush fabrics, not laboratory measurements: tune
 /// them against a swatch (pull along each grain, then on the bias) before relying on the strain verdicts.
 struct FabricProperties: Sendable, Equatable {
@@ -19,6 +24,7 @@ struct FabricProperties: Sendable, Equatable {
 
     static let wovenCotton = FabricProperties(name: "Woven cotton", warpStretchPercent: 0, weftStretchPercent: 0, shearLimitDegrees: 6, bendingStiffness: 0.7, maximumDarts: 6)
     static let felt = FabricProperties(name: "Felt", warpStretchPercent: 0, weftStretchPercent: 0, shearLimitDegrees: 10, bendingStiffness: 0.8, maximumDarts: 6)
+    static let fauxFur = FabricProperties(name: "Faux fur", warpStretchPercent: 10, weftStretchPercent: 20, shearLimitDegrees: 12, bendingStiffness: 0.4, maximumDarts: nil)
     static let fleece = FabricProperties(name: "Fleece", warpStretchPercent: 20, weftStretchPercent: 30, shearLimitDegrees: 15, bendingStiffness: 0.3, maximumDarts: nil)
     static let minky = FabricProperties(name: "Minky", warpStretchPercent: 30, weftStretchPercent: 50, shearLimitDegrees: 20, bendingStiffness: 0.2, maximumDarts: nil)
 

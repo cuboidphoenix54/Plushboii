@@ -13,17 +13,26 @@ private enum ImportKind {
 private enum FabricChoice: String, CaseIterable, Identifiable, Sendable {
     case none = "No fabric adjustment"
     case minky = "2-way stretch minky"
+    case fleece = "Fleece"
+    case fauxFur = "Faux fur"
+    case felt = "Felt (darts)"
     case canvas = "Rigid canvas (darts)"
 
     var id: Self { self }
 
-    var profile: FabricProfile {
+    /// Measured-style behaviour for each choice; nil keeps the pipeline's default (no adjustment).
+    var properties: FabricProperties? {
         switch self {
-        case .none: .none
-        case .minky: .twoWayStretch(warpPercent: 50, weftPercent: 40)
-        case .canvas: .rigid(maxDarts: 4)
+        case .none: nil
+        case .minky: .minky
+        case .fleece: .fleece
+        case .fauxFur: .fauxFur
+        case .felt: .felt
+        case .canvas: .wovenCotton
         }
     }
+
+    var profile: FabricProfile { properties?.profile ?? .none }
 }
 
 private struct AIPipelineReview: Sendable {
@@ -66,14 +75,13 @@ private enum AIPipelineRunner {
         options.outputDirectory = outputDirectory
         options.subject = subject
         options.seamAllowancePoints = seamAllowancePoints
-        switch fabric {
-        case .none:
-            break
-        case .minky:
-            options.warpStretchPercent = 50
-            options.weftStretchPercent = 40
-        case .canvas:
-            options.rigidMaximumDarts = 4
+        if let properties = fabric.properties {
+            if let darts = properties.maximumDarts {
+                options.rigidMaximumDarts = darts
+            } else {
+                options.warpStretchPercent = properties.warpStretchPercent
+                options.weftStretchPercent = properties.weftStretchPercent
+            }
         }
 
         let result = try await PlushAgent.runWithMLX(
@@ -1016,6 +1024,13 @@ struct ContentView: View {
             Label("\(flattening?.islands.count ?? 0) pattern panel(s) ready", systemImage: "checkmark.circle")
                 .font(.caption)
                 .help(stuffingSummary ?? "")
+            if let stuffingSummary {
+                Text(stuffingSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .accessibilityIdentifier("stuffingSummary")
+            }
             TextField("plush height (cm)", text: $plushHeightCentimeters)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 130)
@@ -1026,6 +1041,8 @@ struct ContentView: View {
                 .help("Enter the known physical scale. OBJ and STL files may not specify real-world units.")
             Toggle("Stretch map", isOn: $showHeatmap)
                 .toggleStyle(.button)
+                .accessibilityIdentifier("stretchMapToggle")
+                .accessibilityValue(qualitySummary ?? "")
                 .help([qualitySummary, stuffingSummary].compactMap { $0 }.joined(separator: "\n").nilIfEmpty ?? "Show where fabric must stretch (red) on the 3D model")
             Menu("Options") {
                 Toggle("Merge identical pieces", isOn: $dedupeCongruent)
@@ -1559,7 +1576,7 @@ struct ContentView: View {
                 + (quality.2 > 0 ? ", \(quality.2) flipped triangle(s)" : "")
             stuffingSummary = nil
             if triangles.count / 3 <= 12_000 {
-                let properties = FabricProperties.inferred(from: fabric)
+                let properties = fabricChoice.properties ?? FabricProperties.inferred(from: fabric)
                 let sim = try? await offMainActor {
                     var options = StuffingSimulator.Options()
                     options.properties = properties
@@ -1568,7 +1585,11 @@ struct ContentView: View {
                 }
                 if let sim {
                     stuffingSummary = String(format: "Stuffed preview: holds %.0f%% of the target volume, shape off by %.1f%%, max seam strain %.0f%%%@.", sim.volumeRatio * 100, sim.shapeDeviation * 100, sim.maxEdgeStrain * 100, sim.exceedsFabric ? " (past what the fabric allows)" : "")
+                } else {
+                    stuffingSummary = "Stuffing preview skipped: it needs the whole closed mesh, and this piece is open."
                 }
+            } else {
+                stuffingSummary = "Stuffing preview skipped: mesh has more than 12,000 triangles."
             }
             let worst = result.islands.map(\.report.areaDelta).max() ?? 0
             let darts = result.islands.reduce(0) { $0 + $1.darts.count }
